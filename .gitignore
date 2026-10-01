@@ -1,0 +1,42 @@
+# =========================
+# Java / Spring Boot
+# =========================
+**/target/
+**/.idea/
+**/*.iml
+
+# Spring secrets
+**/src/main/resources/application.properties
+
+# =========================
+# Flutter
+# =========================
+**/.dart_tool/
+**/build/
+**/.flutter-plugins
+**/.flutter-plugins-dependencies
+**/.packages
+**/.pub-cache/
+**/*.iml
+
+# Android
+**/android/.gradle/
+**/android/local.properties/
+
+# iOS
+**/ios/Pods/
+**/ios/.symlinks/
+**/ios/Flutter/ephemeral/
+
+# =========================
+# OS
+# =========================
+.DS_Store
+Thumbs.db
+
+# =========================
+# IDE
+# =========================
+.vscode/
+*.swp
+*.swo
