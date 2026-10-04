@@ -14,6 +14,7 @@ import com.artverse.repository.ArtworkRepository;
 import com.artverse.repository.CommentRepository;
 import com.artverse.repository.LikeRepository;
 import com.artverse.repository.UserRepository;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
@@ -43,9 +44,32 @@ public class ArtworkService {
     private CommentRepository commentRepository;
 
 
-    // =========================
+    // =====================================================
+    // CHECK ARTIST
+    // =====================================================
+
+    private User getArtist(Authentication authentication) {
+
+        User user = userRepository
+                .findByEmail(authentication.getName())
+                .orElseThrow(() ->
+                        new UserNotFoundException("User not found"));
+
+        if (!"ARTIST".equalsIgnoreCase(user.getAccountType())) {
+
+            throw new RuntimeException(
+                    "Only artists can perform this action"
+            );
+        }
+
+        return user;
+    }
+
+
+    // =====================================================
     // UPLOAD ARTWORK
-    // =========================
+    // ARTIST ONLY
+    // =====================================================
 
     public String uploadArtwork(
             ArtworkRequest request,
@@ -53,13 +77,10 @@ public class ArtworkService {
             Authentication authentication
     ) throws IOException {
 
-        String email = authentication.getName();
+        User user = getArtist(authentication);
 
-        User user = userRepository.findByEmail(email)
-                .orElseThrow(() ->
-                        new UserNotFoundException("User not found"));
-
-        String imageUrl = cloudinaryService.uploadImage(image);
+        String imageUrl =
+                cloudinaryService.uploadImage(image);
 
         Artwork artwork = new Artwork();
 
@@ -75,9 +96,10 @@ public class ArtworkService {
     }
 
 
-    // =========================
+    // =====================================================
     // GET ALL ARTWORKS
-    // =========================
+    // USER + ARTIST
+    // =====================================================
 
     public List<ArtworkResponse> getAllArtworks() {
 
@@ -88,23 +110,27 @@ public class ArtworkService {
     }
 
 
-    // =========================
+    // =====================================================
     // GET ARTWORK BY ID
-    // =========================
+    // USER + ARTIST
+    // =====================================================
 
     public ArtworkResponse getArtworkById(Long id) {
 
         Artwork artwork = artworkRepository.findById(id)
                 .orElseThrow(() ->
-                        new ArtworkNotFoundException("Artwork not found"));
+                        new ArtworkNotFoundException(
+                                "Artwork not found"
+                        ));
 
         return mapToResponse(artwork);
     }
 
 
-    // =========================
+    // =====================================================
     // UPDATE ARTWORK
-    // =========================
+    // ARTIST ONLY
+    // =====================================================
 
     public String updateArtwork(
             Long id,
@@ -112,13 +138,17 @@ public class ArtworkService {
             Authentication authentication
     ) {
 
+        User user = getArtist(authentication);
+
         Artwork artwork = artworkRepository.findById(id)
                 .orElseThrow(() ->
-                        new ArtworkNotFoundException("Artwork not found"));
+                        new ArtworkNotFoundException(
+                                "Artwork not found"
+                        ));
 
-        String email = authentication.getName();
+        // Check ownership
+        if (!artwork.getUser().getId().equals(user.getId())) {
 
-        if (!artwork.getUser().getEmail().equals(email)) {
             throw new RuntimeException(
                     "You are not allowed to update this artwork"
             );
@@ -134,22 +164,27 @@ public class ArtworkService {
     }
 
 
-    // =========================
+    // =====================================================
     // DELETE ARTWORK
-    // =========================
+    // ARTIST ONLY
+    // =====================================================
 
     public String deleteArtwork(
             Long id,
             Authentication authentication
     ) {
 
+        User user = getArtist(authentication);
+
         Artwork artwork = artworkRepository.findById(id)
                 .orElseThrow(() ->
-                        new ArtworkNotFoundException("Artwork not found"));
+                        new ArtworkNotFoundException(
+                                "Artwork not found"
+                        ));
 
-        String email = authentication.getName();
+        // Check ownership
+        if (!artwork.getUser().getId().equals(user.getId())) {
 
-        if (!artwork.getUser().getEmail().equals(email)) {
             throw new RuntimeException(
                     "You are not allowed to delete this artwork"
             );
@@ -161,9 +196,9 @@ public class ArtworkService {
     }
 
 
-    // =========================
+    // =====================================================
     // MAP ARTWORK RESPONSE
-    // =========================
+    // =====================================================
 
     private ArtworkResponse mapToResponse(Artwork artwork) {
 
@@ -178,21 +213,28 @@ public class ArtworkService {
     }
 
 
-    // =========================
+    // =====================================================
     // ARTWORK FEED
-    // =========================
+    // USER + ARTIST
+    // =====================================================
 
-    public List<ArtworkFeedResponse> getArtworkFeed(User currentUser) {
+    public List<ArtworkFeedResponse> getArtworkFeed(
+            User currentUser
+    ) {
 
         return artworkRepository.findAll()
                 .stream()
                 .map(artwork -> {
 
                     long likeCount =
-                            likeRepository.countByArtwork(artwork);
+                            likeRepository.countByArtwork(
+                                    artwork
+                            );
 
                     long commentCount =
-                            commentRepository.countByArtwork(artwork);
+                            commentRepository.countByArtwork(
+                                    artwork
+                            );
 
                     boolean liked =
                             likeRepository.existsByUserAndArtwork(
@@ -216,11 +258,13 @@ public class ArtworkService {
     }
 
 
-    // =========================
+    // =====================================================
     // MY ARTWORKS
-    // =========================
+    // =====================================================
 
-    public List<ArtworkFeedResponse> getMyArtworks(User user) {
+    public List<ArtworkFeedResponse> getMyArtworks(
+            User user
+    ) {
 
         return artworkRepository.findByUser(user)
                 .stream()
@@ -242,9 +286,10 @@ public class ArtworkService {
     }
 
 
-    // =========================
+    // =====================================================
     // PUT ARTWORK FOR SALE
-    // =========================
+    // ARTIST ONLY
+    // =====================================================
 
     public String putArtworkForSale(
             Long artworkId,
@@ -252,17 +297,18 @@ public class ArtworkService {
             Authentication authentication
     ) {
 
-        User user = userRepository.findByEmail(authentication.getName())
-                .orElseThrow(() ->
-                        new UserNotFoundException("User not found"));
+        User user = getArtist(authentication);
 
         Artwork artwork = artworkRepository.findById(artworkId)
                 .orElseThrow(() ->
-                        new ArtworkNotFoundException("Artwork not found"));
+                        new ArtworkNotFoundException(
+                                "Artwork not found"
+                        ));
 
 
         // Check ownership
         if (!artwork.getUser().getId().equals(user.getId())) {
+
             throw new RuntimeException(
                     "You can only sell your own artwork"
             );
@@ -271,6 +317,7 @@ public class ArtworkService {
 
         // Prevent sold artwork from being listed again
         if (artwork.getStatus() == ArtworkStatus.SOLD) {
+
             throw new RuntimeException(
                     "Sold artwork cannot be listed for sale again"
             );
@@ -298,52 +345,58 @@ public class ArtworkService {
     }
 
 
-    // =========================
+    // =====================================================
     // GET MARKETPLACE ARTWORKS
-    // =========================
+    // USER + ARTIST
+    // =====================================================
 
-    public List<MarketplaceArtworkResponse> getMarketplaceArtworks() {
+    public List<MarketplaceArtworkResponse>
+    getMarketplaceArtworks() {
 
         return artworkRepository
                 .findByForSaleTrueAndStatus(
                         ArtworkStatus.AVAILABLE
                 )
                 .stream()
-                .map(artwork -> new MarketplaceArtworkResponse(
-                        artwork.getId(),
-                        artwork.getTitle(),
-                        artwork.getDescription(),
-                        artwork.getImageUrl(),
-                        artwork.getCategory(),
-                        artwork.getUser().getFullName(),
-                        artwork.getUser().getProfileImageUrl(),
-                        artwork.getPrice(),
-                        artwork.getCurrency()
-                ))
+                .map(artwork ->
+                        new MarketplaceArtworkResponse(
+                                artwork.getId(),
+                                artwork.getTitle(),
+                                artwork.getDescription(),
+                                artwork.getImageUrl(),
+                                artwork.getCategory(),
+                                artwork.getUser().getFullName(),
+                                artwork.getUser().getProfileImageUrl(),
+                                artwork.getPrice(),
+                                artwork.getCurrency()
+                        )
+                )
                 .toList();
     }
 
 
-    // =========================
+    // =====================================================
     // REMOVE ARTWORK FROM SALE
-    // =========================
+    // ARTIST ONLY
+    // =====================================================
 
     public String removeArtworkFromSale(
             Long artworkId,
             Authentication authentication
     ) {
 
-        User user = userRepository.findByEmail(authentication.getName())
-                .orElseThrow(() ->
-                        new UserNotFoundException("User not found"));
+        User user = getArtist(authentication);
 
         Artwork artwork = artworkRepository.findById(artworkId)
                 .orElseThrow(() ->
-                        new ArtworkNotFoundException("Artwork not found"));
+                        new ArtworkNotFoundException(
+                                "Artwork not found"
+                        ));
 
 
         // Check ownership
         if (!artwork.getUser().getId().equals(user.getId())) {
+
             throw new RuntimeException(
                     "You can only modify your own artwork"
             );
@@ -352,6 +405,7 @@ public class ArtworkService {
 
         // Sold artwork cannot be removed from sale
         if (artwork.getStatus() == ArtworkStatus.SOLD) {
+
             throw new RuntimeException(
                     "Sold artwork is not available for removal from sale"
             );

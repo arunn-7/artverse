@@ -42,18 +42,33 @@ public class UserService {
         User user = userRepository.findByEmail(authentication.getName())
                 .orElseThrow(() -> new UserNotFoundException("User not found"));
 
-        return new UserResponse(
+        UserResponse response = new UserResponse(
                 user.getId(),
                 user.getFullName(),
                 user.getEmail(),
                 user.getRole(),
                 user.getBio(),
                 user.getProfileImageUrl(),
-                artworkRepository.countByUser(user),
-                followRepository.countByFollowing(user),
-                followRepository.countByFollower(user),
                 user.getCreatedAt()
         );
+
+        // Artist-specific information
+        if ("ARTIST".equals(user.getRole())) {
+
+            response.setArtworkCount(
+                    artworkRepository.countByUser(user)
+            );
+
+            response.setFollowers(
+                    followRepository.countByFollowing(user)
+            );
+
+            response.setFollowing(
+                    followRepository.countByFollower(user)
+            );
+        }
+
+        return response;
     }
     public String updateProfile(UpdateProfileRequest request,
                                 Authentication authentication) {

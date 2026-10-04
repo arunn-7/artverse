@@ -6,5 +6,14 @@ public enum NotificationType {
     LIKE,
     COMMENT,
     ANNOUNCEMENT,
-    PURCHASE
+    PURCHASE,
+
+    // Auction notifications
+    NEW_BID,
+    OUTBID,
+    AUCTION_WON,
+    AUCTION_ENDED,
+
+    // Commission notifications
+    COMMISSION
 }

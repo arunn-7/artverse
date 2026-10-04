@@ -64,12 +64,19 @@ public class RazorpayService {
 
         String receipt = String.valueOf(order.get("receipt"));
 
-        // 3. Make sure this order belongs to this artwork
-        if (!receipt.startsWith("artwork_" + artworkId + "_")) {
+        // 3. Check that the order belongs to this artwork
+        // OR belongs to an auction for this artwork
+        boolean validArtworkReceipt =
+                receipt.startsWith("artwork_" + artworkId + "_");
+
+        boolean validAuctionReceipt =
+                receipt.startsWith("auction_");
+
+        if (!validArtworkReceipt && !validAuctionReceipt) {
             return false;
         }
 
-        // 4. Make sure the amount is correct
+        // 4. Verify amount
         long orderAmount = Long.parseLong(
                 String.valueOf(order.get("amount"))
         );
@@ -78,18 +85,83 @@ public class RazorpayService {
             return false;
         }
 
-        // 5. Fetch payment from Razorpay
-        Payment payment = razorpayClient.payments.fetch(paymentId);
+        // 5. Fetch payment
+        Payment payment =
+                razorpayClient.payments.fetch(paymentId);
 
+        // 6. Verify payment belongs to this order
         String paymentOrderId =
                 String.valueOf(payment.get("order_id"));
 
-        // 6. Make sure payment belongs to this order
         if (!orderId.equals(paymentOrderId)) {
             return false;
         }
 
-        // 7. Make sure payment was captured
+        // 7. Verify payment is captured
+        String status =
+                String.valueOf(payment.get("status"));
+
+        return "captured".equalsIgnoreCase(status);
+    }
+    public boolean verifyAuctionPayment(
+            String orderId,
+            String paymentId,
+            String signature,
+            Long auctionId,
+            long expectedAmountInPaise) throws Exception {
+
+        RazorpayClient razorpayClient =
+                new RazorpayClient(keyId, keySecret);
+
+        // 1. Verify signature
+        JSONObject options = new JSONObject();
+
+        options.put("razorpay_order_id", orderId);
+        options.put("razorpay_payment_id", paymentId);
+        options.put("razorpay_signature", signature);
+
+        boolean signatureValid =
+                Utils.verifyPaymentSignature(options, keySecret);
+
+        if (!signatureValid) {
+            return false;
+        }
+
+        // 2. Fetch Razorpay order
+        Order order =
+                razorpayClient.orders.fetch(orderId);
+
+        String receipt =
+                String.valueOf(order.get("receipt"));
+
+        // 3. Verify this order belongs to this auction
+        if (!receipt.startsWith("auction_" + auctionId + "_")) {
+            return false;
+        }
+
+        // 4. Verify amount
+        long orderAmount =
+                Long.parseLong(
+                        String.valueOf(order.get("amount"))
+                );
+
+        if (orderAmount != expectedAmountInPaise) {
+            return false;
+        }
+
+        // 5. Fetch payment
+        Payment payment =
+                razorpayClient.payments.fetch(paymentId);
+
+        // 6. Verify payment belongs to this order
+        String paymentOrderId =
+                String.valueOf(payment.get("order_id"));
+
+        if (!orderId.equals(paymentOrderId)) {
+            return false;
+        }
+
+        // 7. Verify payment is captured
         String status =
                 String.valueOf(payment.get("status"));
 

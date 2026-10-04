@@ -24,6 +24,10 @@ public class FollowService {
     @Autowired
     private NotificationService notificationService;
 
+    @Autowired
+    private ArtistProgressionService artistProgressionService;
+
+
     public String followUser(Long userId, Authentication authentication) {
 
         User follower = userRepository.findByEmail(authentication.getName())
@@ -44,7 +48,20 @@ public class FollowService {
         follow.setFollower(follower);
         follow.setFollowing(following);
 
+        // Save follow
         followRepository.save(follow);
+
+
+        // ==========================================
+        // AUTOMATIC ARTIST LEVEL PROGRESSION
+        // ==========================================
+
+        artistProgressionService.checkAndUpgradeArtist(following);
+
+
+        // ==========================================
+        // NOTIFICATION
+        // ==========================================
 
         notificationService.createNotification(
                 following,
@@ -56,6 +73,8 @@ public class FollowService {
 
         return "User followed successfully";
     }
+
+
     public String unfollowUser(Long followingId, Authentication authentication) {
 
         User follower = userRepository.findByEmail(authentication.getName())
@@ -64,17 +83,24 @@ public class FollowService {
         User following = userRepository.findById(followingId)
                 .orElseThrow(() -> new UserNotFoundException("User not found"));
 
-        Follow follow = followRepository.findByFollowerAndFollowing(follower, following)
-                .orElseThrow(() -> new RuntimeException("You are not following this user"));
+        Follow follow = followRepository
+                .findByFollowerAndFollowing(follower, following)
+                .orElseThrow(() ->
+                        new RuntimeException("You are not following this user")
+                );
 
         followRepository.delete(follow);
 
         return "User unfollowed successfully";
     }
+
+
     public List<UserSummaryResponse> getFollowers(Long userId) {
 
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new UserNotFoundException("User not found"));
+                .orElseThrow(() ->
+                        new UserNotFoundException("User not found")
+                );
 
         return followRepository.findByFollowing(user)
                 .stream()
@@ -85,10 +111,14 @@ public class FollowService {
                 ))
                 .toList();
     }
+
+
     public List<UserSummaryResponse> getFollowing(Long userId) {
 
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new UserNotFoundException("User not found"));
+                .orElseThrow(() ->
+                        new UserNotFoundException("User not found")
+                );
 
         return followRepository.findByFollower(user)
                 .stream()
@@ -99,9 +129,12 @@ public class FollowService {
                 ))
                 .toList();
     }
+
+
     public long getFollowersCount(User user) {
         return followRepository.countByFollowing(user);
     }
+
 
     public long getFollowingCount(User user) {
         return followRepository.countByFollower(user);

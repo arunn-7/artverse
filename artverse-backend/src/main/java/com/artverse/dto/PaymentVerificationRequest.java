@@ -5,7 +5,12 @@ public class PaymentVerificationRequest {
     private String razorpayOrderId;
     private String razorpayPaymentId;
     private String razorpaySignature;
+
     private Long artworkId;
+
+    // For auction payment
+    private Long auctionId;
+
 
     public String getRazorpayOrderId() {
         return razorpayOrderId;
@@ -15,6 +20,7 @@ public class PaymentVerificationRequest {
         this.razorpayOrderId = razorpayOrderId;
     }
 
+
     public String getRazorpayPaymentId() {
         return razorpayPaymentId;
     }
@@ -22,6 +28,7 @@ public class PaymentVerificationRequest {
     public void setRazorpayPaymentId(String razorpayPaymentId) {
         this.razorpayPaymentId = razorpayPaymentId;
     }
+
 
     public String getRazorpaySignature() {
         return razorpaySignature;
@@ -31,11 +38,21 @@ public class PaymentVerificationRequest {
         this.razorpaySignature = razorpaySignature;
     }
 
+
     public Long getArtworkId() {
         return artworkId;
     }
 
     public void setArtworkId(Long artworkId) {
         this.artworkId = artworkId;
+    }
+
+
+    public Long getAuctionId() {
+        return auctionId;
+    }
+
+    public void setAuctionId(Long auctionId) {
+        this.auctionId = auctionId;
     }
 }

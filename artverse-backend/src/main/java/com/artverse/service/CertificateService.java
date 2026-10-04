@@ -87,4 +87,42 @@ public class CertificateService {
 
         return "Certificate uploaded successfully";
     }
+    public String approveCertificate(Long certificateId) {
+
+        Certificate certificate = certificateRepository
+                .findById(certificateId)
+                .orElseThrow(() ->
+                        new RuntimeException("Certificate not found")
+                );
+
+        certificate.setVerificationStatus("APPROVED");
+        certificateRepository.save(certificate);
+
+        User artist = certificate.getUser();
+
+        artist.setVerificationStatus("APPROVED");
+        userRepository.save(artist);
+
+        return "Certificate approved successfully";
+    }
+
+
+    public String rejectCertificate(Long certificateId) {
+
+        Certificate certificate = certificateRepository
+                .findById(certificateId)
+                .orElseThrow(() ->
+                        new RuntimeException("Certificate not found")
+                );
+
+        certificate.setVerificationStatus("REJECTED");
+        certificateRepository.save(certificate);
+
+        User artist = certificate.getUser();
+
+        artist.setVerificationStatus("REJECTED");
+        userRepository.save(artist);
+
+        return "Certificate rejected successfully";
+    }
 }

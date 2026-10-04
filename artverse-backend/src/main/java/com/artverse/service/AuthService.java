@@ -7,7 +7,7 @@ import com.artverse.entity.User;
 import com.artverse.repository.UserRepository;
 import com.artverse.security.jwt.JwtService;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -16,13 +16,13 @@ import java.time.LocalDateTime;
 public class AuthService {
 
     @Autowired
+    private PasswordEncoder passwordEncoder;
+
+    @Autowired
     private UserRepository userRepository;
 
     @Autowired
     private JwtService jwtService;
-
-    private final BCryptPasswordEncoder passwordEncoder =
-            new BCryptPasswordEncoder();
 
 
     // =====================================================
@@ -42,12 +42,14 @@ public class AuthService {
         user.setFullName(request.getFullName());
         user.setEmail(request.getEmail());
 
+        // Encrypt password using BCrypt
         user.setPassword(
                 passwordEncoder.encode(request.getPassword())
         );
 
         String accountType =
                 request.getAccountType().toUpperCase();
+
 
         // =================================================
         // NORMAL USER
@@ -60,8 +62,8 @@ public class AuthService {
 
             user.setArtistLevel(null);
             user.setVerificationStatus("NOT_APPLICABLE");
-
         }
+
 
         // =================================================
         // ARTIST
@@ -82,6 +84,7 @@ public class AuthService {
             String artistLevel =
                     request.getArtistLevel().toUpperCase();
 
+
             // Validate artist level
             if (!artistLevel.equals("BEGINNER")
                     && !artistLevel.equals("INTERMEDIATE")
@@ -92,14 +95,15 @@ public class AuthService {
 
             user.setArtistLevel(artistLevel);
 
+
             // Beginner doesn't require verification
             if (artistLevel.equals("BEGINNER")) {
 
                 user.setVerificationStatus(
                         "NOT_REQUIRED"
                 );
-
             }
+
 
             // Intermediate and Professional
             // require certificate verification
@@ -109,8 +113,8 @@ public class AuthService {
                         "PENDING"
                 );
             }
-
         }
+
 
         // =================================================
         // INVALID ACCOUNT TYPE
@@ -121,6 +125,8 @@ public class AuthService {
             return "Invalid account type";
         }
 
+
+        // Set creation time
         user.setCreatedAt(LocalDateTime.now());
 
         // Save user
@@ -144,6 +150,7 @@ public class AuthService {
             throw new RuntimeException("User not found");
         }
 
+        // Check password
         if (!passwordEncoder.matches(
                 request.getPassword(),
                 user.getPassword())) {
@@ -151,6 +158,7 @@ public class AuthService {
             throw new RuntimeException("Invalid password");
         }
 
+        // Generate JWT
         String token =
                 jwtService.generateToken(user.getEmail());
 

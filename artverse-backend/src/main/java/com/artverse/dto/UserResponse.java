@@ -1,6 +1,9 @@
 package com.artverse.dto;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
+
 import java.time.LocalDateTime;
+
 
 public class UserResponse {
 
@@ -9,6 +12,14 @@ public class UserResponse {
     private String email;
     private String role;
     private LocalDateTime createdAt;
+
+    private String bio;
+    private String profileImageUrl;
+
+    // Artist-only fields
+    private Long artworkCount;
+    private Long followers;
+    private Long following;
 
     public UserResponse() {
     }
@@ -20,9 +31,6 @@ public class UserResponse {
             String role,
             String bio,
             String profileImageUrl,
-            long artworkCount,
-            long followers,
-            long following,
             LocalDateTime createdAt) {
 
         this.id = id;
@@ -31,16 +39,8 @@ public class UserResponse {
         this.role = role;
         this.bio = bio;
         this.profileImageUrl = profileImageUrl;
-        this.artworkCount = artworkCount;
-        this.followers = followers;     // <-- Missing
-        this.following = following;     // <-- Missing
         this.createdAt = createdAt;
     }
-    private String bio;
-    private String profileImageUrl;
-    private long artworkCount;
-    private long followers;
-    private long following;
 
     public Long getId() {
         return id;
@@ -98,27 +98,27 @@ public class UserResponse {
         this.profileImageUrl = profileImageUrl;
     }
 
-    public long getArtworkCount() {
+    public Long getArtworkCount() {
         return artworkCount;
     }
 
-    public void setArtworkCount(long artworkCount) {
+    public void setArtworkCount(Long artworkCount) {
         this.artworkCount = artworkCount;
     }
-    public long getFollowers() {
+
+    public Long getFollowers() {
         return followers;
     }
 
-    public void setFollowers(long followers) {
+    public void setFollowers(Long followers) {
         this.followers = followers;
     }
 
-    public long getFollowing() {
+    public Long getFollowing() {
         return following;
     }
 
-    public void setFollowing(long following) {
+    public void setFollowing(Long following) {
         this.following = following;
     }
-
 }
