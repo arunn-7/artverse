@@ -11,6 +11,8 @@ public class PaymentVerificationRequest {
     // For auction payment
     private Long auctionId;
 
+    private Long commissionId;
+
 
     public String getRazorpayOrderId() {
         return razorpayOrderId;
@@ -55,4 +57,13 @@ public class PaymentVerificationRequest {
     public void setAuctionId(Long auctionId) {
         this.auctionId = auctionId;
     }
+
+    public Long getCommissionId() {
+        return commissionId;
+    }
+
+    public void setCommissionId(Long commissionId) {
+        this.commissionId = commissionId;
+    }
+
 }

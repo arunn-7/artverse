@@ -38,6 +38,15 @@ public class Commission {
     @Column(nullable = false)
     private CommissionStatus status = CommissionStatus.OPEN;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private CommissionPaymentStatus paymentStatus =
+            CommissionPaymentStatus.PENDING;
+
+    private String razorpayOrderId;
+
+    private String razorpayPaymentId;
+
     private LocalDateTime createdAt;
 
     private LocalDateTime updatedAt;
@@ -148,4 +157,28 @@ public class Commission {
     public LocalDateTime getUpdatedAt() {
         return updatedAt;
     }
+    public CommissionPaymentStatus getPaymentStatus() {
+        return paymentStatus;
+    }
+
+    public void setPaymentStatus(CommissionPaymentStatus paymentStatus) {
+        this.paymentStatus = paymentStatus;
+    }
+
+    public String getRazorpayOrderId() {
+        return razorpayOrderId;
+    }
+
+    public void setRazorpayOrderId(String razorpayOrderId) {
+        this.razorpayOrderId = razorpayOrderId;
+    }
+
+    public String getRazorpayPaymentId() {
+        return razorpayPaymentId;
+    }
+
+    public void setRazorpayPaymentId(String razorpayPaymentId) {
+        this.razorpayPaymentId = razorpayPaymentId;
+    }
+
 }

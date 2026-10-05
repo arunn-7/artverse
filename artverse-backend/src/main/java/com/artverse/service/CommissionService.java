@@ -15,6 +15,11 @@ import com.artverse.repository.UserRepository;
 import com.artverse.exception.UserNotFoundException ;
 import com.artverse.entity.NotificationType;
 import com.artverse.service.NotificationService;
+import com.artverse.entity.CommissionDelivery;
+import com.artverse.repository.CommissionDeliveryRepository;
+import com.artverse.dto.CommissionDeliveryRequest;
+import com.artverse.dto.CommissionDeliveryResponse;
+import com.artverse.entity.CommissionPaymentStatus;
 
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -37,6 +42,9 @@ public class CommissionService {
 
     @Autowired
     private NotificationService notificationService;
+
+    @Autowired
+    private CommissionDeliveryRepository commissionDeliveryRepository;
 
 
     // =========================================================
@@ -100,6 +108,30 @@ public class CommissionService {
         Commission savedCommission =
                 commissionRepository.save(commission);
 
+        System.out.println("Commission created by: " + client.getEmail());
+
+        List<User> artists =
+                userRepository.findByAccountType("ARTIST");
+
+        System.out.println("Artists found: " + artists.size());
+
+        for (User artist : artists) {
+
+            System.out.println(
+                    "Sending commission notification to: "
+                            + artist.getEmail()
+            );
+
+            notificationService.createNotification(
+                    artist,
+                    client,
+                    "New Commission Available",
+                    "A new commission \""
+                            + savedCommission.getTitle()
+                            + "\" has been posted. You can submit your proposal if interested.",
+                    NotificationType.COMMISSION
+            );
+        }
 
         return convertToCommissionResponse(savedCommission);
     }
@@ -152,17 +184,13 @@ public class CommissionService {
                 .orElseThrow(() ->
                         new RuntimeException("User not found"));
 
-
         // Find commission
-
         Commission commission = commissionRepository
                 .findById(commissionId)
                 .orElseThrow(() ->
                         new RuntimeException("Commission not found"));
 
-
         // Commission must still be open
-
         if (commission.getStatus() != CommissionStatus.OPEN
                 && commission.getStatus() != CommissionStatus.OFFER_RECEIVED) {
 
@@ -171,9 +199,7 @@ public class CommissionService {
             );
         }
 
-
         // Artist cannot submit twice
-
         if (commissionOfferRepository
                 .existsByCommissionAndArtist(commission, artist)) {
 
@@ -181,29 +207,23 @@ public class CommissionService {
                     "You have already submitted an offer for this commission");
         }
 
-
         // Validate fee
-
-        if (request.getProposedFee() == null ||
-                request.getProposedFee().signum() <= 0) {
+        if (request.getProposedFee() == null
+                || request.getProposedFee().signum() <= 0) {
 
             throw new RuntimeException(
                     "Proposed fee must be greater than zero");
         }
 
-
         // Validate days
-
-        if (request.getEstimatedDays() == null ||
-                request.getEstimatedDays() <= 0) {
+        if (request.getEstimatedDays() == null
+                || request.getEstimatedDays() <= 0) {
 
             throw new RuntimeException(
                     "Estimated days must be greater than zero");
         }
 
-
         // Artist cannot offer more days than client requested
-
         if (request.getEstimatedDays() >
                 commission.getRequiredDays()) {
 
@@ -211,9 +231,7 @@ public class CommissionService {
                     "Estimated days cannot exceed the required days");
         }
 
-
         // Create offer
-
         CommissionOffer offer = new CommissionOffer();
 
         offer.setCommission(commission);
@@ -222,7 +240,6 @@ public class CommissionService {
         offer.setEstimatedDays(request.getEstimatedDays());
         offer.setMessage(request.getMessage());
 
-
         CommissionOffer savedOffer =
                 commissionOfferRepository.save(offer);
 
@@ -230,6 +247,22 @@ public class CommissionService {
         commission.setStatus(CommissionStatus.OFFER_RECEIVED);
 
         commissionRepository.save(commission);
+
+        // Notify the client about the new proposal
+        notificationService.createNotification(
+                commission.getClient(),          // receiver = client
+                artist,                          // sender = artist
+                "New Commission Proposal",
+                artist.getFullName()
+                        + " has submitted a proposal for your commission \""
+                        + commission.getTitle()
+                        + "\". Proposed fee: ₹"
+                        + savedOffer.getProposedFee()
+                        + ", Estimated time: "
+                        + savedOffer.getEstimatedDays()
+                        + " days.",
+                NotificationType.COMMISSION
+        );
 
         return convertToOfferResponse(savedOffer);
     }
@@ -428,7 +461,7 @@ public class CommissionService {
                 .orElseThrow(() ->
                         new UserNotFoundException("User not found"));
 
-        // 2. Find offer
+        // 2. Find selected offer
         CommissionOffer selectedOffer =
                 commissionOfferRepository.findById(offerId)
                         .orElseThrow(() ->
@@ -444,7 +477,7 @@ public class CommissionService {
             );
         }
 
-        // 5. Commission must still accept offers
+        // 5. Commission must still be open
         if (commission.getStatus() != CommissionStatus.OPEN &&
                 commission.getStatus() != CommissionStatus.OFFER_RECEIVED) {
 
@@ -453,43 +486,43 @@ public class CommissionService {
             );
         }
 
-        // 6. Select the chosen offer
+        // 6. Select this offer
         selectedOffer.setStatus(CommissionOfferStatus.SELECTED);
 
         // 7. Get all offers
         List<CommissionOffer> offers =
                 commissionOfferRepository.findByCommission(commission);
 
-        // 8. Notify selected and other artists
+        // 8. Notify selected artist and other artists
         for (CommissionOffer offer : offers) {
 
             if (offer.getId().equals(selectedOffer.getId())) {
 
                 // Selected artist notification
                 notificationService.createNotification(
-                        offer.getArtist(),
-                        client,
+                        selectedOffer.getArtist(),   // receiver = selected artist
+                        client,                      // sender = client
                         "Commission Offer Accepted",
                         "Your proposal for commission \""
                                 + commission.getTitle()
                                 + "\" has been accepted by the client. "
                                 + "Fee: ₹"
-                                + offer.getProposedFee()
+                                + selectedOffer.getProposedFee()
                                 + ", Estimated time: "
-                                + offer.getEstimatedDays()
+                                + selectedOffer.getEstimatedDays()
                                 + " days.",
                         NotificationType.COMMISSION
                 );
 
             } else {
 
-                // Other artists
+                // Other artists are not selected
                 offer.setStatus(CommissionOfferStatus.NOT_SELECTED);
 
                 notificationService.createNotification(
                         offer.getArtist(),
                         client,
-                        "Commission Proposal Update",
+                        "Commission Proposal Not Selected",
                         "Your proposal for commission \""
                                 + commission.getTitle()
                                 + "\" was not selected by the client.",
@@ -498,7 +531,7 @@ public class CommissionService {
             }
         }
 
-        // 9. Save all offers
+        // 9. Save all offer status changes
         commissionOfferRepository.saveAll(offers);
 
         // 10. Update commission status
@@ -508,4 +541,334 @@ public class CommissionService {
 
         return "Commission offer accepted successfully";
     }
+    public String startCommission(
+            Long commissionId,
+            Authentication authentication) {
+
+        User artist = userRepository.findByEmail(authentication.getName())
+                .orElseThrow(() ->
+                        new UserNotFoundException("User not found"));
+
+        Commission commission = commissionRepository.findById(commissionId)
+                .orElseThrow(() ->
+                        new RuntimeException("Commission not found"));
+
+        // Commission must have an artist selected
+        if (commission.getStatus() != CommissionStatus.ARTIST_SELECTED) {
+            throw new RuntimeException(
+                    "Commission is not ready to be started"
+            );
+        }
+
+        if (commission.getPaymentStatus()
+                != CommissionPaymentStatus.PAID) {
+
+            throw new RuntimeException(
+                    "Commission payment has not been completed"
+            );
+        }
+
+        // Find the selected offer
+        List<CommissionOffer> offers =
+                commissionOfferRepository.findByCommission(commission);
+
+        CommissionOffer selectedOffer = offers.stream()
+                .filter(offer ->
+                        offer.getStatus() == CommissionOfferStatus.SELECTED)
+                .findFirst()
+                .orElseThrow(() ->
+                        new RuntimeException("Selected artist not found"));
+
+        // Only selected artist can start
+        if (!selectedOffer.getArtist().getId().equals(artist.getId())) {
+            throw new RuntimeException(
+                    "Only the selected artist can start this commission"
+            );
+        }
+
+        // Change status
+        commission.setStatus(CommissionStatus.IN_PROGRESS);
+
+        commissionRepository.save(commission);
+
+        // Notify client
+        notificationService.createNotification(
+                commission.getClient(),
+                artist,
+                "Commission Started",
+                artist.getFullName()
+                        + " has started working on your commission \""
+                        + commission.getTitle()
+                        + "\".",
+                NotificationType.ANNOUNCEMENT
+        );
+
+        return "Commission started successfully";
+    }
+    public String completeCommission(
+            Long commissionId,
+            Authentication authentication) {
+
+        User artist = userRepository.findByEmail(authentication.getName())
+                .orElseThrow(() ->
+                        new UserNotFoundException("User not found"));
+
+        Commission commission = commissionRepository.findById(commissionId)
+                .orElseThrow(() ->
+                        new RuntimeException("Commission not found"));
+
+        // Commission must be in progress
+        if (commission.getStatus() != CommissionStatus.IN_PROGRESS) {
+            throw new RuntimeException(
+                    "Commission is not currently in progress"
+            );
+        }
+
+        // Find the selected offer
+        List<CommissionOffer> offers =
+                commissionOfferRepository.findByCommission(commission);
+
+        CommissionOffer selectedOffer = offers.stream()
+                .filter(offer ->
+                        offer.getStatus() == CommissionOfferStatus.SELECTED)
+                .findFirst()
+                .orElseThrow(() ->
+                        new RuntimeException("Selected artist not found"));
+
+        // Only selected artist can complete
+        if (!selectedOffer.getArtist().getId().equals(artist.getId())) {
+            throw new RuntimeException(
+                    "Only the selected artist can complete this commission"
+            );
+        }
+
+        // Change status
+        commission.setStatus(CommissionStatus.COMPLETED);
+
+        commissionRepository.save(commission);
+
+        // Notify client
+        notificationService.createNotification(
+                commission.getClient(),
+                artist,
+                "Commission Completed",
+                artist.getFullName()
+                        + " has completed your commission \""
+                        + commission.getTitle()
+                        + "\".",
+                NotificationType.COMMISSION
+        );
+
+        return "Commission completed successfully";
+    }
+    public String submitDelivery(
+            Long commissionId,
+            CommissionDeliveryRequest request,
+            Authentication authentication) {
+
+        User artist = userRepository.findByEmail(authentication.getName())
+                .orElseThrow(() ->
+                        new UserNotFoundException("User not found"));
+
+        Commission commission = commissionRepository.findById(commissionId)
+                .orElseThrow(() ->
+                        new RuntimeException("Commission not found"));
+
+        if (commission.getStatus() != CommissionStatus.IN_PROGRESS) {
+            throw new RuntimeException(
+                    "Commission is not currently in progress"
+            );
+        }
+
+        List<CommissionOffer> offers =
+                commissionOfferRepository.findByCommission(commission);
+
+        CommissionOffer selectedOffer = offers.stream()
+                .filter(offer ->
+                        offer.getStatus() == CommissionOfferStatus.SELECTED)
+                .findFirst()
+                .orElseThrow(() ->
+                        new RuntimeException("Selected artist not found"));
+
+        if (!selectedOffer.getArtist().getId().equals(artist.getId())) {
+            throw new RuntimeException(
+                    "Only the selected artist can submit the delivery"
+            );
+        }
+
+        CommissionDelivery delivery = new CommissionDelivery();
+
+        delivery.setCommission(commission);
+        delivery.setArtist(artist);
+        delivery.setFileUrl(request.getFileUrl());
+        delivery.setMessage(request.getMessage());
+
+        commissionDeliveryRepository.save(delivery);
+
+        commission.setStatus(CommissionStatus.DELIVERED);
+        commissionRepository.save(commission);
+
+        notificationService.createNotification(
+                commission.getClient(),
+                artist,
+                "Commission Delivered",
+                artist.getFullName()
+                        + " has delivered your commission \""
+                        + commission.getTitle()
+                        + "\". Please review and approve the work.",
+                NotificationType.COMMISSION
+        );
+
+        return "Commission delivered successfully";
+    }
+    public String approveDelivery(
+            Long commissionId,
+            Authentication authentication) {
+
+        User client = userRepository.findByEmail(authentication.getName())
+                .orElseThrow(() ->
+                        new UserNotFoundException("User not found"));
+
+        Commission commission = commissionRepository.findById(commissionId)
+                .orElseThrow(() ->
+                        new RuntimeException("Commission not found"));
+
+        // Commission must be delivered
+        if (commission.getStatus() != CommissionStatus.DELIVERED) {
+            throw new RuntimeException(
+                    "Commission is not awaiting client approval"
+            );
+        }
+
+        // Only commission owner can approve
+        if (!commission.getClient().getId().equals(client.getId())) {
+            throw new RuntimeException(
+                    "Only the commission owner can approve the delivery"
+            );
+        }
+
+        // Make sure delivery exists
+        CommissionDelivery delivery =
+                commissionDeliveryRepository.findByCommission(commission)
+                        .orElseThrow(() ->
+                                new RuntimeException(
+                                        "Commission delivery not found"
+                                ));
+
+        // Complete commission
+        commission.setStatus(CommissionStatus.COMPLETED);
+
+        commissionRepository.save(commission);
+
+        // Notify artist
+        notificationService.createNotification(
+                delivery.getArtist(),
+                client,
+                "Commission Approved",
+                "The client has approved your completed work for commission \""
+                        + commission.getTitle()
+                        + "\".",
+                NotificationType.COMMISSION
+        );
+
+        return "Commission approved successfully";
+    }
+    public String requestRevision(
+            Long commissionId,
+            String message,
+            Authentication authentication) {
+
+        User client = userRepository.findByEmail(authentication.getName())
+                .orElseThrow(() ->
+                        new UserNotFoundException("User not found"));
+
+        Commission commission = commissionRepository.findById(commissionId)
+                .orElseThrow(() ->
+                        new RuntimeException("Commission not found"));
+
+        if (commission.getStatus() != CommissionStatus.DELIVERED) {
+            throw new RuntimeException(
+                    "Commission is not awaiting revision"
+            );
+        }
+
+        // Only commission owner can request revision
+        if (!commission.getClient().getId().equals(client.getId())) {
+            throw new RuntimeException(
+                    "Only the commission owner can request a revision"
+            );
+        }
+
+        CommissionDelivery delivery =
+                commissionDeliveryRepository.findByCommission(commission)
+                        .orElseThrow(() ->
+                                new RuntimeException(
+                                        "Commission delivery not found"
+                                ));
+
+        commission.setStatus(CommissionStatus.IN_PROGRESS);
+        commissionRepository.save(commission);
+
+        String revisionMessage =
+                (message == null || message.trim().isEmpty())
+                        ? "The client has requested a revision for your commission."
+                        : "The client requested a revision: " + message;
+
+        notificationService.createNotification(
+                delivery.getArtist(),
+                client,
+                "Revision Requested",
+                revisionMessage,
+                NotificationType.COMMISSION
+        );
+
+        return "Revision requested successfully";
+    }
+    public CommissionDeliveryResponse getDelivery(
+            Long commissionId,
+            Authentication authentication) {
+
+        User user = userRepository.findByEmail(authentication.getName())
+                .orElseThrow(() ->
+                        new UserNotFoundException("User not found"));
+
+        Commission commission = commissionRepository.findById(commissionId)
+                .orElseThrow(() ->
+                        new RuntimeException("Commission not found"));
+
+        // Only the client or selected artist can view the delivery
+        boolean isClient =
+                commission.getClient().getId().equals(user.getId());
+
+        List<CommissionOffer> offers =
+                commissionOfferRepository.findByCommission(commission);
+
+        boolean isSelectedArtist = offers.stream()
+                .anyMatch(offer ->
+                        offer.getStatus() == CommissionOfferStatus.SELECTED
+                                && offer.getArtist().getId().equals(user.getId()));
+
+        if (!isClient && !isSelectedArtist) {
+            throw new RuntimeException(
+                    "You are not authorized to view this delivery"
+            );
+        }
+
+        CommissionDelivery delivery =
+                commissionDeliveryRepository.findByCommission(commission)
+                        .orElseThrow(() ->
+                                new RuntimeException(
+                                        "Commission delivery not found"
+                                ));
+
+        return new CommissionDeliveryResponse(
+                delivery.getId(),
+                commission.getId(),
+                delivery.getArtist().getFullName(),
+                delivery.getFileUrl(),
+                delivery.getMessage(),
+                delivery.getSubmittedAt()
+        );
+    }
+
 }

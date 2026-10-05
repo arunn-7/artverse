@@ -167,4 +167,70 @@ public class RazorpayService {
 
         return "captured".equalsIgnoreCase(status);
     }
+    public boolean verifyCommissionPayment(
+            String orderId,
+            String paymentId,
+            String signature,
+            Long commissionId,
+            long expectedAmountInPaise) throws Exception {
+
+        RazorpayClient razorpayClient =
+                new RazorpayClient(keyId, keySecret);
+
+        // 1. Verify Razorpay signature
+        JSONObject options = new JSONObject();
+
+        options.put("razorpay_order_id", orderId);
+        options.put("razorpay_payment_id", paymentId);
+        options.put("razorpay_signature", signature);
+
+        boolean signatureValid =
+                Utils.verifyPaymentSignature(options, keySecret);
+
+        if (!signatureValid) {
+            return false;
+        }
+
+        // 2. Fetch Razorpay order
+        Order order =
+                razorpayClient.orders.fetch(orderId);
+
+        // 3. Verify this order belongs to this commission
+        String receipt =
+                String.valueOf(order.get("receipt"));
+
+        if (!receipt.startsWith(
+                "commission_" + commissionId + "_")) {
+
+            return false;
+        }
+
+        // 4. Verify amount
+        long orderAmount =
+                Long.parseLong(
+                        String.valueOf(order.get("amount"))
+                );
+
+        if (orderAmount != expectedAmountInPaise) {
+            return false;
+        }
+
+        // 5. Fetch payment
+        Payment payment =
+                razorpayClient.payments.fetch(paymentId);
+
+        // 6. Verify payment belongs to this order
+        String paymentOrderId =
+                String.valueOf(payment.get("order_id"));
+
+        if (!orderId.equals(paymentOrderId)) {
+            return false;
+        }
+
+        // 7. Verify payment is captured
+        String status =
+                String.valueOf(payment.get("status"));
+
+        return "captured".equalsIgnoreCase(status);
+    }
 }

@@ -5,6 +5,12 @@ import com.artverse.dto.CommissionResponse;
 import com.artverse.dto.CreateCommissionOfferRequest;
 import com.artverse.dto.CreateCommissionRequest;
 import com.artverse.service.CommissionService;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.http.ResponseEntity;
+import com.artverse.dto.CommissionDeliveryRequest;
+import jakarta.validation.Valid;
+import com.artverse.dto.CommissionDeliveryResponse;
 
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -121,6 +127,80 @@ public class CommissionController {
         return commissionService.acceptOffer(
                 offerId,
                 authentication
+        );
+    }
+    @PostMapping("/{commissionId}/start")
+    public String startCommission(
+            @PathVariable Long commissionId,
+            Authentication authentication) {
+
+        return commissionService.startCommission(
+                commissionId,
+                authentication
+        );
+    }
+    @PostMapping("/{commissionId}/complete")
+    public ResponseEntity<String> completeCommission(
+            @PathVariable Long commissionId,
+            Authentication authentication) {
+
+        return ResponseEntity.ok(
+                commissionService.completeCommission(
+                        commissionId,
+                        authentication
+                )
+        );
+    }
+    @PostMapping("/{commissionId}/deliver")
+    public ResponseEntity<String> submitDelivery(
+            @PathVariable Long commissionId,
+            @Valid @RequestBody CommissionDeliveryRequest request,
+            Authentication authentication) {
+
+        return ResponseEntity.ok(
+                commissionService.submitDelivery(
+                        commissionId,
+                        request,
+                        authentication
+                )
+        );
+    }
+    @PostMapping("/{commissionId}/approve")
+    public ResponseEntity<String> approveDelivery(
+            @PathVariable Long commissionId,
+            Authentication authentication) {
+
+        return ResponseEntity.ok(
+                commissionService.approveDelivery(
+                        commissionId,
+                        authentication
+                )
+        );
+    }
+    @PostMapping("/{commissionId}/revision")
+    public ResponseEntity<String> requestRevision(
+            @PathVariable Long commissionId,
+            @RequestBody(required = false) String message,
+            Authentication authentication) {
+
+        return ResponseEntity.ok(
+                commissionService.requestRevision(
+                        commissionId,
+                        message,
+                        authentication
+                )
+        );
+    }
+    @GetMapping("/{commissionId}/delivery")
+    public ResponseEntity<CommissionDeliveryResponse> getDelivery(
+            @PathVariable Long commissionId,
+            Authentication authentication) {
+
+        return ResponseEntity.ok(
+                commissionService.getDelivery(
+                        commissionId,
+                        authentication
+                )
         );
     }
 }

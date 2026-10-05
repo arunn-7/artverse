@@ -16,6 +16,16 @@ import com.artverse.entity.AuctionStatus;
 import com.artverse.entity.Bid;
 import com.artverse.repository.AuctionRepository;
 import com.artverse.repository.BidRepository;
+import com.artverse.entity.Commission;
+import com.artverse.entity.CommissionStatus;
+import com.artverse.entity.CommissionPaymentStatus;
+import com.artverse.repository.CommissionRepository;
+import com.artverse.repository.CommissionOfferRepository;
+import com.artverse.entity.CommissionOffer;
+import com.artverse.entity.CommissionOfferStatus;
+import com.artverse.service.NotificationService;
+import com.artverse.entity.NotificationType;
+
 
 import java.math.BigDecimal;
 @RestController
@@ -37,33 +47,62 @@ public class PaymentController {
     @Autowired
     private BidRepository bidRepository;
 
-    @PostMapping("/create-order")
-    public String createOrder(
-            @RequestParam Long artworkId,
+    @Autowired
+    private CommissionRepository commissionRepository;
+
+    @Autowired
+    private CommissionOfferRepository commissionOfferRepository;
+
+    @Autowired
+    private NotificationService notificationService;
+
+    @PostMapping("/commission/create-order")
+    public String createCommissionOrder(
+            @RequestParam Long commissionId,
             Authentication authentication) throws Exception {
 
-        Artwork artwork = artworkRepository.findById(artworkId)
+        Commission commission = commissionRepository.findById(commissionId)
                 .orElseThrow(() ->
-                        new ArtworkNotFoundException("Artwork not found"));
+                        new RuntimeException("Commission not found"));
 
-        if (!artwork.isForSale()) {
-            throw new RuntimeException("Artwork is not for sale");
+        // Only the client who created the commission can pay
+        if (!commission.getClient().getEmail()
+                .equals(authentication.getName())) {
+
+            throw new RuntimeException(
+                    "Only the commission owner can make this payment");
         }
 
-        if (artwork.getStatus() != com.artverse.entity.ArtworkStatus.AVAILABLE) {
-            throw new RuntimeException("Artwork is not available");
+        // Commission must have an artist selected
+        if (commission.getStatus()
+                != com.artverse.entity.CommissionStatus.ARTIST_SELECTED) {
+
+            throw new RuntimeException(
+                    "Artist has not been selected");
         }
 
-        if (artwork.getUser().getEmail().equals(authentication.getName())) {
-            throw new RuntimeException("You cannot buy your own artwork");
-        }
+        // Find selected offer
+        CommissionOffer selectedOffer =
+                commissionOfferRepository
+                        .findByCommission(commission)
+                        .stream()
+                        .filter(offer ->
+                                offer.getStatus()
+                                        == CommissionOfferStatus.SELECTED)
+                        .findFirst()
+                        .orElseThrow(() ->
+                                new RuntimeException(
+                                        "Selected offer not found"));
 
-        long amountInPaise = artwork.getPrice()
-                .multiply(java.math.BigDecimal.valueOf(100))
-                .longValueExact();
+        // Payment amount = artist's proposed fee
+        long amountInPaise =
+                selectedOffer.getProposedFee()
+                        .multiply(BigDecimal.valueOf(100))
+                        .longValueExact();
 
-        String receipt = "artwork_" + artworkId + "_"
-                + System.currentTimeMillis();
+        String receipt =
+                "commission_" + commissionId + "_"
+                        + System.currentTimeMillis();
 
         Order order = razorpayService.createOrder(
                 amountInPaise,
@@ -76,7 +115,9 @@ public class PaymentController {
         response.put("amount", (Object) order.get("amount"));
         response.put("currency", (Object) order.get("currency"));
         response.put("keyId", razorpayService.getKeyId());
-        response.put("artworkId", artworkId);
+        response.put("commissionId", commissionId);
+        response.put("offerId", selectedOffer.getId());
+        response.put("proposedFee", selectedOffer.getProposedFee());
 
         return response.toString();
     }
@@ -213,5 +254,111 @@ public class PaymentController {
                 request.getAuctionId(),
                 authentication
         );
+    }
+    @PostMapping("/commission/verify")
+    public String verifyCommissionPayment(
+            @RequestBody PaymentVerificationRequest request,
+            Authentication authentication) throws Exception {
+
+        // 1. Find commission
+        Commission commission =
+                commissionRepository.findById(
+                        request.getCommissionId()
+                ).orElseThrow(() ->
+                        new RuntimeException("Commission not found"));
+
+        // 2. Only the client can make the payment
+        if (!commission.getClient().getEmail()
+                .equals(authentication.getName())) {
+
+            throw new RuntimeException(
+                    "Only the commission client can make payment"
+            );
+        }
+
+        // 3. Commission must be delivered
+        if (commission.getStatus()
+                != CommissionStatus.DELIVERED) {
+
+            throw new RuntimeException(
+                    "Commission is not ready for payment"
+            );
+        }
+
+        // 4. Prevent duplicate payment
+        if (commission.getPaymentStatus()
+                == CommissionPaymentStatus.PAID) {
+
+            throw new RuntimeException(
+                    "Commission has already been paid"
+            );
+        }
+
+        // 5. Find selected offer
+        CommissionOffer selectedOffer =
+                commissionOfferRepository
+                        .findByCommission(commission)
+                        .stream()
+                        .filter(offer ->
+                                offer.getStatus()
+                                        == CommissionOfferStatus.SELECTED)
+                        .findFirst()
+                        .orElseThrow(() ->
+                                new RuntimeException(
+                                        "Selected offer not found"
+                                ));
+
+        // 6. Get accepted offer amount
+        BigDecimal amount =
+                selectedOffer.getProposedFee();
+
+        long expectedAmountInPaise =
+                amount
+                        .multiply(BigDecimal.valueOf(100))
+                        .longValueExact();
+
+        // 7. Verify payment with Razorpay
+        boolean valid =
+                razorpayService.verifyCommissionPayment(
+                        request.getRazorpayOrderId(),
+                        request.getRazorpayPaymentId(),
+                        request.getRazorpaySignature(),
+                        commission.getId(),
+                        expectedAmountInPaise
+                );
+
+        // 8. Stop if verification fails
+        if (!valid) {
+            throw new RuntimeException(
+                    "Commission payment verification failed"
+            );
+        }
+
+        // 9. Mark payment as paid
+        commission.setPaymentStatus(
+                CommissionPaymentStatus.PAID
+        );
+
+        // 10. Mark commission as completed
+        commission.setStatus(
+                CommissionStatus.COMPLETED
+        );
+
+        commissionRepository.save(commission);
+
+        // 11. Notify artist
+        notificationService.createNotification(
+                selectedOffer.getArtist(),
+                commission.getClient(),
+                "Commission Payment Received",
+                "Payment of ₹"
+                        + amount
+                        + " has been completed for your commission \""
+                        + commission.getTitle()
+                        + "\".",
+                NotificationType.COMMISSION
+        );
+
+        return "Commission payment completed successfully";
     }
 }
