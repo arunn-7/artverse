@@ -23,7 +23,6 @@ import org.springframework.security.core.Authentication;
 import java.io.IOException;
 import java.util.List;
 
-
 @RestController
 @RequestMapping("/api/artworks")
 @SecurityRequirement(name = "Bearer Authentication")
@@ -86,8 +85,6 @@ public class ArtworkController {
 
     ) throws IOException {
 
-        // IMPORTANT:
-        // Normal USER accounts cannot upload artwork
         requireArtist(authentication);
 
         ArtworkRequest request = new ArtworkRequest();
@@ -117,11 +114,60 @@ public class ArtworkController {
 
 
     // =====================================================
-    // GET ARTWORK BY ID
+    // GET MY ARTWORKS
+    // ARTIST ONLY
+    // =====================================================
+
+    @GetMapping("/my-artworks")
+    public List<ArtworkFeedResponse> getMyArtworks(
+            Authentication authentication
+    ) {
+
+        User user = userRepository
+                .findByEmail(authentication.getName())
+                .orElseThrow(() ->
+                        new ResponseStatusException(
+                                HttpStatus.UNAUTHORIZED,
+                                "User not found"
+                        )
+                );
+
+        requireArtist(authentication);
+
+        return artworkService.getMyArtworks(user);
+    }
+
+
+    // =====================================================
+    // ARTWORK FEED
     // USER + ARTIST
     // =====================================================
 
-    @GetMapping("/{id}")
+    @GetMapping("/feed")
+    public List<ArtworkFeedResponse> getFeed(
+            Authentication authentication
+    ) {
+
+        User currentUser = userRepository
+                .findByEmail(authentication.getName())
+                .orElseThrow(() ->
+                        new ResponseStatusException(
+                                HttpStatus.UNAUTHORIZED,
+                                "User not found"
+                        )
+                );
+
+        return artworkService.getArtworkFeed(currentUser);
+    }
+
+
+    // =====================================================
+    // GET ARTWORK BY ID
+    // USER + ARTIST
+    // ID MUST BE NUMERIC
+    // =====================================================
+
+    @GetMapping("/{id:\\d+}")
     public ArtworkResponse getArtworkById(
             @PathVariable Long id
     ) {
@@ -135,7 +181,7 @@ public class ArtworkController {
     // ARTIST ONLY
     // =====================================================
 
-    @PutMapping("/{id}")
+    @PutMapping("/{id:\\d+}")
     public String updateArtwork(
 
             @PathVariable Long id,
@@ -162,7 +208,7 @@ public class ArtworkController {
     // ARTIST ONLY
     // =====================================================
 
-    @DeleteMapping("/{id}")
+    @DeleteMapping("/{id:\\d+}")
     public String deleteArtwork(
 
             @PathVariable Long id,
@@ -181,31 +227,11 @@ public class ArtworkController {
 
 
     // =====================================================
-    // ARTWORK FEED
-    // USER + ARTIST
-    // =====================================================
-
-    @GetMapping("/feed")
-    public List<ArtworkFeedResponse> getFeed(
-            Authentication authentication
-    ) {
-
-        User currentUser = userRepository
-                .findByEmail(authentication.getName())
-                .orElseThrow(() ->
-                        new RuntimeException("User not found")
-                );
-
-        return artworkService.getArtworkFeed(currentUser);
-    }
-
-
-    // =====================================================
     // PUT ARTWORK FOR SALE
     // ARTIST ONLY
     // =====================================================
 
-    @PutMapping("/{id}/sell")
+    @PutMapping("/{id:\\d+}/sell")
     public String sellArtwork(
 
             @PathVariable Long id,
@@ -231,7 +257,7 @@ public class ArtworkController {
     // ARTIST ONLY
     // =====================================================
 
-    @PutMapping("/{id}/remove-sale")
+    @PutMapping("/{id:\\d+}/remove-sale")
     public String removeArtworkFromSale(
 
             @PathVariable Long id,

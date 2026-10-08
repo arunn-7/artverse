@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'like_service.dart';
+import '../../services/like_service.dart';
 
 class ArtworkDetailScreen extends StatefulWidget {
   final dynamic artwork;

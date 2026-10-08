@@ -134,5 +134,43 @@ public class UserService {
                 artworkService.getMyArtworks(profileUser)
         );
     }
+    public String uploadCertificate(
+            MultipartFile certificate,
+            Authentication authentication) throws IOException {
+
+        User user = userRepository.findByEmail(authentication.getName())
+                .orElseThrow(() ->
+                        new UserNotFoundException("User not found"));
+
+        // Only artists can upload certificates
+        if (!"ARTIST".equals(user.getRole())) {
+            throw new RuntimeException(
+                    "Only artists can upload certificates"
+            );
+        }
+
+        // Certificate required for Intermediate and Professional
+        if (!"INTERMEDIATE".equals(user.getArtistLevel())
+                && !"PROFESSIONAL".equals(user.getArtistLevel())) {
+
+            throw new RuntimeException(
+                    "Certificate is not required for this artist level"
+            );
+        }
+
+        // Upload certificate to Cloudinary
+        String certificateUrl =
+                cloudinaryService.uploadCertificate(certificate);
+
+        // Save URL
+        user.setCertificateUrl(certificateUrl);
+
+        // Keep verification pending
+        user.setVerificationStatus("PENDING");
+
+        userRepository.save(user);
+
+        return "Certificate uploaded successfully";
+    }
 
 }

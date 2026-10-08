@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
-import 'auth_service.dart';
-import 'home_screen.dart';
+import '../../services/auth_service.dart';
+import '../user/home_screen.dart';
+import 'account_type_screen.dart';
+import '../artist/artist_home_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -13,6 +15,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final AuthService authService = AuthService();
 
   bool isLoading = false;
+
   final emailController = TextEditingController();
   final passwordController = TextEditingController();
 
@@ -24,6 +27,10 @@ class _LoginScreenState extends State<LoginScreen> {
     passwordController.dispose();
     super.dispose();
   }
+
+  // ============================================================
+  // LOGIN
+  // ============================================================
 
   Future<void> login() async {
     final email = emailController.text.trim();
@@ -56,18 +63,39 @@ class _LoginScreenState extends State<LoginScreen> {
       print('Email: ${result['email']}');
       print('Role: ${result['role']}');
 
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (context) => const HomeScreen(),
-        ),
-      );
+      // ================= ROLE BASED NAVIGATION =================
+
+      final role = result['role'];
+
+      print('LOGIN ROLE: $role');
+
+      if (role == 'ARTIST') {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const ArtistHomeScreen(),
+          ),
+        );
+      } else if (role == 'USER') {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const HomeScreen(),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Unknown user role: $role'),
+          ),
+        );
+      }
 
     } catch (e) {
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
+        const SnackBar(
           content: Text(
             'Login failed. Please check your email and password.',
           ),
@@ -84,6 +112,10 @@ class _LoginScreenState extends State<LoginScreen> {
       }
     }
   }
+  // ============================================================
+  // UI
+  // ============================================================
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -99,7 +131,10 @@ class _LoginScreenState extends State<LoginScreen> {
             children: [
               const SizedBox(height: 25),
 
-              // Logo
+              // ==================================================
+              // LOGO
+              // ==================================================
+
               Center(
                 child: Container(
                   width: 75,
@@ -117,6 +152,10 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
 
               const SizedBox(height: 28),
+
+              // ==================================================
+              // TITLE
+              // ==================================================
 
               const Center(
                 child: Text(
@@ -142,6 +181,10 @@ class _LoginScreenState extends State<LoginScreen> {
 
               const SizedBox(height: 45),
 
+              // ==================================================
+              // EMAIL
+              // ==================================================
+
               const Text(
                 'Email',
                 style: TextStyle(
@@ -157,7 +200,9 @@ class _LoginScreenState extends State<LoginScreen> {
                 keyboardType: TextInputType.emailAddress,
                 decoration: InputDecoration(
                   hintText: 'Enter your email',
-                  prefixIcon: const Icon(Icons.email_outlined),
+                  prefixIcon: const Icon(
+                    Icons.email_outlined,
+                  ),
                   filled: true,
                   fillColor: Colors.white,
                   border: OutlineInputBorder(
@@ -168,6 +213,10 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
 
               const SizedBox(height: 20),
+
+              // ==================================================
+              // PASSWORD
+              // ==================================================
 
               const Text(
                 'Password',
@@ -184,7 +233,9 @@ class _LoginScreenState extends State<LoginScreen> {
                 obscureText: obscurePassword,
                 decoration: InputDecoration(
                   hintText: 'Enter your password',
-                  prefixIcon: const Icon(Icons.lock_outline),
+                  prefixIcon: const Icon(
+                    Icons.lock_outline,
+                  ),
                   suffixIcon: IconButton(
                     icon: Icon(
                       obscurePassword
@@ -208,6 +259,10 @@ class _LoginScreenState extends State<LoginScreen> {
 
               const SizedBox(height: 12),
 
+              // ==================================================
+              // FORGOT PASSWORD
+              // ==================================================
+
               Align(
                 alignment: Alignment.centerRight,
                 child: TextButton(
@@ -219,6 +274,10 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
 
               const SizedBox(height: 15),
+
+              // ==================================================
+              // LOGIN BUTTON
+              // ==================================================
 
               SizedBox(
                 width: double.infinity,
@@ -253,6 +312,10 @@ class _LoginScreenState extends State<LoginScreen> {
 
               const SizedBox(height: 25),
 
+              // ==================================================
+              // REGISTER
+              // ==================================================
+
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -262,9 +325,16 @@ class _LoginScreenState extends State<LoginScreen> {
                       color: Colors.grey.shade700,
                     ),
                   ),
+
                   TextButton(
                     onPressed: () {
-                      // Register screen will be connected next.
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) =>
+                          const AccountTypeScreen(),
+                        ),
+                      );
                     },
                     child: const Text(
                       'Register',

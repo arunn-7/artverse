@@ -13,6 +13,8 @@ public class User {
 
     private String accountType;
 
+    private String certificateUrl;
+
     private String artistLevel;
 
     private String verificationStatus;
@@ -119,5 +121,13 @@ public class User {
 
     public void setCreatedAt(LocalDateTime createdAt) {
         this.createdAt = createdAt;
+    }
+
+    public String getCertificateUrl() {
+        return certificateUrl;
+    }
+
+    public void setCertificateUrl(String certificateUrl) {
+        this.certificateUrl = certificateUrl;
     }
 }

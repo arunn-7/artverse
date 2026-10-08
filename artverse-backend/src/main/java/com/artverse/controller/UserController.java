@@ -75,4 +75,14 @@ public class UserController {
 
         return userService.getPublicProfile(id, authentication);
     }
+    @PutMapping("/me/certificate")
+    public String uploadCertificate(
+            @RequestPart("certificate") MultipartFile certificate,
+            Authentication authentication) throws IOException {
+
+        return userService.uploadCertificate(
+                certificate,
+                authentication
+        );
+    }
 }
