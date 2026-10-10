@@ -1,38 +1,22 @@
+
 package com.artverse.entity;
 
-import jakarta.persistence.*;
 import java.time.LocalDateTime;
 
-@Entity
-@Table(name = "users")
 public class User {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
-
+    private String userUid;
     private String accountType;
-
     private String certificateUrl;
-
     private String artistLevel;
-
     private String verificationStatus;
-
     private String fullName;
-
-    @Column(unique = true, nullable = false)
     private String email;
-
     private String password;
-
     private String role;
-
-    @Column(length = 500)
     private String bio;
-
     private String profileImageUrl;
-
     private LocalDateTime createdAt;
 
     public User() {
@@ -43,12 +27,32 @@ public class User {
         return id;
     }
 
+    public void setId(Long id) {
+        this.id = id;
+    }
+
+    public String getUserUid() {
+        return userUid;
+    }
+
+    public void setUserUid(String userUid) {
+        this.userUid = userUid;
+    }
+
     public String getAccountType() {
         return accountType;
     }
 
     public void setAccountType(String accountType) {
         this.accountType = accountType;
+    }
+
+    public String getCertificateUrl() {
+        return certificateUrl;
+    }
+
+    public void setCertificateUrl(String certificateUrl) {
+        this.certificateUrl = certificateUrl;
     }
 
     public String getArtistLevel() {
@@ -121,13 +125,5 @@ public class User {
 
     public void setCreatedAt(LocalDateTime createdAt) {
         this.createdAt = createdAt;
-    }
-
-    public String getCertificateUrl() {
-        return certificateUrl;
-    }
-
-    public void setCertificateUrl(String certificateUrl) {
-        this.certificateUrl = certificateUrl;
     }
 }

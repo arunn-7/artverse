@@ -6,7 +6,7 @@ import 'package:flutter/foundation.dart';
 import '../core/constants/app_constants.dart';
 
 class AuthService {
-  static const String baseUrl = 'http://10.229.36.59:8080';
+  static const String baseUrl = 'http://10.117.106.58:8080';
 
   Future<Map<String, dynamic>> login(
       String email,

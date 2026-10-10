@@ -1,34 +1,30 @@
 package com.artverse.dto;
 
-import java.time.LocalDateTime;
-
 public class AdminCertificateResponse {
 
-    private Long id;
-
-    private Long artistId;
+    private String id;
+    private String artistId;
+    private String uploadedAt;
     private String artistName;
     private String artistEmail;
     private String artistLevel;
-
     private String certificateName;
     private String certificateUrl;
     private String verificationStatus;
-    private LocalDateTime uploadedAt;
 
     public AdminCertificateResponse() {
     }
 
     public AdminCertificateResponse(
-            Long id,
-            Long artistId,
+            String id,
+            String artistId,
             String artistName,
             String artistEmail,
             String artistLevel,
             String certificateName,
             String certificateUrl,
             String verificationStatus,
-            LocalDateTime uploadedAt) {
+            String uploadedAt) {
 
         this.id = id;
         this.artistId = artistId;
@@ -41,11 +37,11 @@ public class AdminCertificateResponse {
         this.uploadedAt = uploadedAt;
     }
 
-    public Long getId() {
+    public String getId() {
         return id;
     }
 
-    public Long getArtistId() {
+    public String getArtistId() {
         return artistId;
     }
 
@@ -73,15 +69,15 @@ public class AdminCertificateResponse {
         return verificationStatus;
     }
 
-    public LocalDateTime getUploadedAt() {
+    public String getUploadedAt() {
         return uploadedAt;
     }
 
-    public void setId(Long id) {
+    public void setId(String id) {
         this.id = id;
     }
 
-    public void setArtistId(Long artistId) {
+    public void setArtistId(String artistId) {
         this.artistId = artistId;
     }
 
@@ -109,7 +105,7 @@ public class AdminCertificateResponse {
         this.verificationStatus = verificationStatus;
     }
 
-    public void setUploadedAt(LocalDateTime uploadedAt) {
+    public void setUploadedAt(String uploadedAt) {
         this.uploadedAt = uploadedAt;
     }
 }

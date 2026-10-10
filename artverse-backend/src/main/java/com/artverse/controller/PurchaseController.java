@@ -15,11 +15,14 @@ public class PurchaseController {
     @Autowired
     private PurchaseService purchaseService;
 
-    @PostMapping("/{artworkId}/buy")
-    public String buyArtwork(@PathVariable Long artworkId,
-                             Authentication authentication) {
+    @PostMapping("/buy/{artworkId}")
+    public String buyArtwork(
+            @PathVariable String artworkId,
+            Authentication authentication) {
 
-        return purchaseService.buyArtwork(artworkId, authentication);
+        throw new UnsupportedOperationException(
+                "Use the Razorpay payment flow: create order, then verify payment."
+        );
     }
     @GetMapping("/my")
     public List<PurchaseHistoryResponse> getMyPurchases(

@@ -2,26 +2,27 @@ package com.artverse.dto;
 
 public class UserSummaryResponse {
 
-    private Long id;
+    private String id;
     private String fullName;
     private String profileImageUrl;
 
     public UserSummaryResponse() {
     }
 
-    public UserSummaryResponse(Long id,
-                               String fullName,
-                               String profileImageUrl) {
+    public UserSummaryResponse(
+            String id,
+            String fullName,
+            String profileImageUrl) {
         this.id = id;
         this.fullName = fullName;
         this.profileImageUrl = profileImageUrl;
     }
 
-    public Long getId() {
+    public String getId() {
         return id;
     }
 
-    public void setId(Long id) {
+    public void setId(String id) {
         this.id = id;
     }
 

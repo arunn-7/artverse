@@ -1,363 +1,523 @@
+
 package com.artverse.controller;
 
-import com.artverse.entity.Artwork;
-import com.artverse.exception.ArtworkNotFoundException;
-import com.artverse.repository.ArtworkRepository;
-import com.artverse.service.RazorpayService;
+import com.artverse.dto.PaymentVerificationRequest;
+import com.artverse.entity.*;
+import com.artverse.model.FirestoreArtwork;
+import com.artverse.model.FirestoreAuction;
+import com.artverse.service.*;
+import com.google.cloud.firestore.DocumentSnapshot;
+import com.google.cloud.firestore.Firestore;
+import com.google.cloud.firestore.QueryDocumentSnapshot;
+import com.google.cloud.firestore.QuerySnapshot;
 import com.razorpay.Order;
 import org.json.JSONObject;
-import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
-import com.artverse.dto.PaymentVerificationRequest;
-import com.artverse.service.PurchaseService;
-import com.artverse.entity.Auction;
-import com.artverse.entity.AuctionStatus;
-import com.artverse.entity.Bid;
-import com.artverse.repository.AuctionRepository;
-import com.artverse.repository.BidRepository;
-import com.artverse.entity.Commission;
-import com.artverse.entity.CommissionStatus;
-import com.artverse.entity.CommissionPaymentStatus;
-import com.artverse.repository.CommissionRepository;
-import com.artverse.repository.CommissionOfferRepository;
-import com.artverse.entity.CommissionOffer;
-import com.artverse.entity.CommissionOfferStatus;
-import com.artverse.service.NotificationService;
-import com.artverse.entity.NotificationType;
-
+import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.concurrent.ExecutionException;
+
 @RestController
 @RequestMapping("/api/payments")
 public class PaymentController {
 
-    @Autowired
-    private RazorpayService razorpayService;
+    private final RazorpayService razorpayService;
+    private final PurchaseService purchaseService;
+    private final FirestoreArtworkService artworkService;
+    private final FirestoreAuctionService auctionService;
+    private final FirestoreUserService userService;
+    private final Firestore firestore;
+    private final NotificationService notificationService;
 
-    @Autowired
-    private ArtworkRepository artworkRepository;
+    private static final String COMMISSIONS = "commissions";
+    private static final String OFFERS = "commissionOffers";
 
-    @Autowired
-    private PurchaseService purchaseService;
+    public PaymentController(
+            RazorpayService razorpayService,
+            PurchaseService purchaseService,
+            FirestoreArtworkService artworkService,
+            FirestoreAuctionService auctionService,
+            FirestoreUserService userService,
+            Firestore firestore,
+            NotificationService notificationService) {
 
-    @Autowired
-    private AuctionRepository auctionRepository;
+        this.razorpayService = razorpayService;
+        this.purchaseService = purchaseService;
+        this.artworkService = artworkService;
+        this.auctionService = auctionService;
+        this.userService = userService;
+        this.firestore = firestore;
+        this.notificationService = notificationService;
+    }
 
-    @Autowired
-    private BidRepository bidRepository;
+    // ---------------------------------------------------------
+    // Helpers
+    // ---------------------------------------------------------
 
-    @Autowired
-    private CommissionRepository commissionRepository;
+    private String currentEmail(Authentication authentication) {
+        if (authentication == null || authentication.getName() == null) {
+            throw new ResponseStatusException(
+                    HttpStatus.UNAUTHORIZED, "Authentication required");
+        }
 
-    @Autowired
-    private CommissionOfferRepository commissionOfferRepository;
+        return authentication.getName().trim().toLowerCase(Locale.ROOT);
+    }
 
-    @Autowired
-    private NotificationService notificationService;
+    private DocumentSnapshot getDocument(
+            String collection, String id, String message) {
+        try {
+            DocumentSnapshot document = firestore.collection(collection)
+                    .document(id)
+                    .get()
+                    .get();
 
-    @PostMapping("/commission/create-order")
-    public String createCommissionOrder(
-            @RequestParam Long commissionId,
+            if (!document.exists()) {
+                throw new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, message);
+            }
+
+            return document;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new ResponseStatusException(
+                    HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Firestore operation interrupted");
+        } catch (ExecutionException e) {
+            throw new ResponseStatusException(
+                    HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Firestore operation failed");
+        }
+    }
+
+    private QuerySnapshot query(
+            com.google.cloud.firestore.Query query) {
+        try {
+            return query.get().get();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new ResponseStatusException(
+                    HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Firestore query interrupted");
+        } catch (ExecutionException e) {
+            throw new ResponseStatusException(
+                    HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Firestore query failed");
+        }
+    }
+
+    private BigDecimal readMoney(
+            DocumentSnapshot document, String field) {
+        Object value = document.get(field);
+
+        if (value == null) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Missing amount field: " + field);
+        }
+
+        try {
+            return new BigDecimal(value.toString());
+        } catch (NumberFormatException e) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Invalid amount field: " + field);
+        }
+    }
+
+    private long toPaise(BigDecimal amount) {
+        if (amount == null || amount.signum() <= 0) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST, "Payment amount must be positive");
+        }
+
+        try {
+            return amount.multiply(BigDecimal.valueOf(100))
+                    .longValueExact();
+        } catch (ArithmeticException e) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Invalid payment amount precision");
+        }
+    }
+
+    private JSONObject orderResponse(
+            Order order, long amount, String idField, String id) {
+        JSONObject response = new JSONObject();
+        response.put("orderId", (Object) String.valueOf(order.get("id")));
+        response.put("amount", (Object) amount);
+        response.put("currency", (Object) "INR");
+        response.put("keyId", (Object) razorpayService.getKeyId());
+        response.put(idField, (Object) id);
+        return response;
+    }
+
+    // ---------------------------------------------------------
+    // Artwork payment
+    // ---------------------------------------------------------
+
+    @PostMapping("/artwork/create-order")
+    public String createArtworkOrder(
+            @RequestParam String artworkId,
             Authentication authentication) throws Exception {
 
-        Commission commission = commissionRepository.findById(commissionId)
-                .orElseThrow(() ->
-                        new RuntimeException("Commission not found"));
+        String email = currentEmail(authentication);
+        FirestoreArtwork artwork = artworkService.getArtworkById(artworkId);
 
-        // Only the client who created the commission can pay
-        if (!commission.getClient().getEmail()
-                .equals(authentication.getName())) {
-
-            throw new RuntimeException(
-                    "Only the commission owner can make this payment");
+        if (artwork == null) {
+            throw new ResponseStatusException(
+                    HttpStatus.NOT_FOUND, "Artwork not found");
         }
 
-        // Commission must have an artist selected
-        if (commission.getStatus()
-                != com.artverse.entity.CommissionStatus.ARTIST_SELECTED) {
-
-            throw new RuntimeException(
-                    "Artist has not been selected");
+        if (!artwork.isForSale()
+                || !"AVAILABLE".equalsIgnoreCase(artwork.getStatus())) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST, "Artwork is not available");
         }
 
-        // Find selected offer
-        CommissionOffer selectedOffer =
-                commissionOfferRepository
-                        .findByCommission(commission)
-                        .stream()
-                        .filter(offer ->
-                                offer.getStatus()
-                                        == CommissionOfferStatus.SELECTED)
-                        .findFirst()
-                        .orElseThrow(() ->
-                                new RuntimeException(
-                                        "Selected offer not found"));
+        if (artwork.getArtistUid() != null) {
+            User artist = userService.getUserByUid(artwork.getArtistUid());
 
-        // Payment amount = artist's proposed fee
-        long amountInPaise =
-                selectedOffer.getProposedFee()
-                        .multiply(BigDecimal.valueOf(100))
-                        .longValueExact();
+            if (artist != null && artist.getEmail() != null
+                    && email.equalsIgnoreCase(artist.getEmail())) {
+                throw new ResponseStatusException(
+                        HttpStatus.FORBIDDEN,
+                        "You cannot buy your own artwork");
+            }
+        }
 
-        String receipt =
-                "commission_" + commissionId + "_"
-                        + System.currentTimeMillis();
+        long amount = toPaise(artwork.getPrice());
+        String receipt = "artwork_" + artworkId + "_" + System.currentTimeMillis();
+        Order order = razorpayService.createOrder(amount, receipt);
 
-        Order order = razorpayService.createOrder(
-                amountInPaise,
-                receipt
-        );
-
-        JSONObject response = new JSONObject();
-
-        response.put("orderId", (Object) order.get("id"));
-        response.put("amount", (Object) order.get("amount"));
-        response.put("currency", (Object) order.get("currency"));
-        response.put("keyId", razorpayService.getKeyId());
-        response.put("commissionId", commissionId);
-        response.put("offerId", selectedOffer.getId());
-        response.put("proposedFee", selectedOffer.getProposedFee());
-
-        return response.toString();
+        return orderResponse(order, amount, "artworkId", artworkId).toString();
     }
+
     @PostMapping("/verify")
-    public String verifyPayment(
+    public String verifyArtworkPayment(
             @RequestBody PaymentVerificationRequest request,
             Authentication authentication) throws Exception {
 
-        Artwork artwork = artworkRepository.findById(request.getArtworkId())
-                .orElseThrow(() ->
-                        new ArtworkNotFoundException("Artwork not found"));
+        FirestoreArtwork artwork =
+                artworkService.getArtworkById(request.getArtworkId());
 
-        long expectedAmountInPaise = artwork.getPrice()
-                .multiply(java.math.BigDecimal.valueOf(100))
-                .longValueExact();
+        if (artwork == null) {
+            throw new ResponseStatusException(
+                    HttpStatus.NOT_FOUND, "Artwork not found");
+        }
+
+        long expectedAmount = toPaise(artwork.getPrice());
+
+        boolean valid = razorpayService.verifyPayment(
+                request.getRazorpayOrderId(),
+                request.getRazorpayPaymentId(),
+                request.getRazorpaySignature(),
+                request.getArtworkId(),
+                expectedAmount);
+
+        if (!valid) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST, "Payment verification failed");
+        }
+
+        return purchaseService.buyArtwork(
+                request.getArtworkId(),
+                authentication,
+                request.getRazorpayOrderId(),
+                request.getRazorpayPaymentId());
+    }
+
+    // ---------------------------------------------------------
+    // Auction payment
+    // ---------------------------------------------------------
+
+    @PostMapping("/auction/create-order")
+    public String createAuctionOrder(
+            @RequestParam String auctionId,
+            Authentication authentication) throws Exception {
+
+        String email = currentEmail(authentication);
+        FirestoreAuction auction = auctionService.getAuction(auctionId);
+
+        if (auction == null) {
+            throw new ResponseStatusException(
+                    HttpStatus.NOT_FOUND, "Auction not found");
+        }
+
+        if (!"ENDED".equalsIgnoreCase(auction.getStatus())) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST, "Auction has not ended yet");
+        }
+
+        if (auction.getWinnerUid() == null
+                || auction.getWinnerEmail() == null
+                || !auction.getWinnerEmail().equalsIgnoreCase(email)) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "Only the auction winner can make this payment");
+        }
+
+        long amount = toPaise(auction.getCurrentHighestBid());
+        String receipt = "auction_" + auctionId + "_" + System.currentTimeMillis();
+        Order order = razorpayService.createOrder(amount, receipt);
+
+        JSONObject response =
+                orderResponse(order, amount, "auctionId", auctionId);
+        response.put("artworkId", (Object) auction.getArtworkId());
+        response.put("winningBid", (Object) auction.getCurrentHighestBid());
+        response.put("winner", (Object) auction.getWinnerName());
+
+        return response.toString();
+    }
+
+    @PostMapping("/auction/verify")
+    public String verifyAuctionPayment(
+            @RequestBody PaymentVerificationRequest request,
+            Authentication authentication) throws Exception {
+
+        FirestoreAuction auction =
+                auctionService.getAuction(request.getAuctionId());
+
+        if (auction == null) {
+            throw new ResponseStatusException(
+                    HttpStatus.NOT_FOUND, "Auction not found");
+        }
+
+        if (!"ENDED".equalsIgnoreCase(auction.getStatus())) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST, "Auction has not ended yet");
+        }
+
+        if (auction.getWinnerEmail() == null
+                || !auction.getWinnerEmail().equalsIgnoreCase(
+                currentEmail(authentication))) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "Only the auction winner can complete payment");
+        }
+
+        long expectedAmount = toPaise(auction.getCurrentHighestBid());
 
         boolean valid = razorpayService.verifyAuctionPayment(
                 request.getRazorpayOrderId(),
                 request.getRazorpayPaymentId(),
                 request.getRazorpaySignature(),
                 request.getAuctionId(),
-                expectedAmountInPaise
-        );
+                expectedAmount);
 
         if (!valid) {
-            throw new RuntimeException("Payment verification failed");
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Auction payment verification failed");
         }
 
-        return purchaseService.buyArtwork(
-                request.getArtworkId(),
-                authentication
-        );
+        return purchaseService.completeAuctionPurchase(
+                request.getAuctionId(),
+                authentication,
+                request.getRazorpayOrderId(),
+                request.getRazorpayPaymentId());
     }
-    @PostMapping("/auction/create-order")
-    public String createAuctionOrder(
-            @RequestParam Long auctionId,
+
+    // ---------------------------------------------------------
+    // Commission payment - Firestore
+    // ---------------------------------------------------------
+
+    @PostMapping("/commission/create-order")
+    public String createCommissionOrder(
+            @RequestParam String commissionId,
             Authentication authentication) throws Exception {
 
-        Auction auction = auctionRepository.findById(auctionId)
-                .orElseThrow(() -> new RuntimeException("Auction not found"));
+        String email = currentEmail(authentication);
 
-        // Auction must be ended
-        if (auction.getStatus() != AuctionStatus.ENDED) {
-            throw new RuntimeException("Auction has not ended yet");
+        DocumentSnapshot commission = getDocument(
+                COMMISSIONS, commissionId, "Commission not found");
+
+        String clientEmail = commission.getString("clientEmail");
+
+        if (clientEmail == null || !email.equalsIgnoreCase(clientEmail)) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "Only the commission owner can make this payment");
         }
 
-        // Find highest bid
-        Bid highestBid = bidRepository
-                .findTopByAuctionOrderByAmountDesc(auction)
-                .orElseThrow(() ->
-                        new RuntimeException("No bids were placed on this auction"));
-
-        // Check logged-in user is the winner
-        if (!highestBid.getBidder().getEmail()
-                .equals(authentication.getName())) {
-
-            throw new RuntimeException(
-                    "Only the auction winner can make this payment");
+        String status = commission.getString("status");
+        if (!CommissionStatus.ARTIST_SELECTED.name().equals(status)) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST, "Artist has not been selected");
         }
 
-        BigDecimal winningAmount = highestBid.getAmount();
+        String paymentStatus = commission.getString("paymentStatus");
+        if (CommissionPaymentStatus.PAID.name().equals(paymentStatus)) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT, "Commission has already been paid");
+        }
 
-        long amountInPaise = winningAmount
-                .multiply(BigDecimal.valueOf(100))
-                .longValueExact();
+        QuerySnapshot offers = query(
+                firestore.collection(OFFERS)
+                        .whereEqualTo("commissionId", commissionId)
+                        .whereEqualTo("status",
+                                CommissionOfferStatus.SELECTED.name())
+                        .limit(1));
 
-        String receipt = "auction_" + auctionId + "_"
-                + System.currentTimeMillis();
+        if (offers.isEmpty()) {
+            throw new ResponseStatusException(
+                    HttpStatus.NOT_FOUND, "Selected offer not found");
+        }
+
+        QueryDocumentSnapshot offer = offers.getDocuments().get(0);
+        BigDecimal fee = readMoney(offer, "proposedFee");
+        long amount = toPaise(fee);
 
         Order order = razorpayService.createOrder(
-                amountInPaise,
-                receipt
-        );
+                amount,
+                "commission_" + commissionId + "_" + System.currentTimeMillis());
 
-        JSONObject response = new JSONObject();
+        // Save the order ID so verification can confirm this commission's order.
+        Map<String, Object> update = new HashMap<>();
+        update.put("razorpayOrderId", String.valueOf(order.get("id")));
+        update.put("updatedAt", LocalDateTime.now().toString());
 
-        response.put("orderId", (Object) order.get("id"));
-        response.put("amount", (Object) order.get("amount"));
-        response.put("currency", (Object) order.get("currency"));
-        response.put("keyId", razorpayService.getKeyId());
-        response.put("auctionId", auctionId);
-        response.put("artworkId", auction.getArtwork().getId());
-        response.put("winningBid", winningAmount);
-        response.put("winner", highestBid.getBidder().getFullName());
+        try {
+            firestore.collection(COMMISSIONS)
+                    .document(commissionId)
+                    .update(update)
+                    .get();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new ResponseStatusException(
+                    HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Saving commission payment order was interrupted");
+        } catch (ExecutionException e) {
+            throw new ResponseStatusException(
+                    HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Could not save commission payment order");
+        }
+
+        JSONObject response = orderResponse(
+                order, amount, "commissionId", commissionId);
+        response.put("offerId", (Object) offer.getId());
+        response.put("proposedFee", (Object) fee.toPlainString());
 
         return response.toString();
     }
-    @PostMapping("/auction/verify")
-    public String verifyAuctionPayment(
-            @RequestBody PaymentVerificationRequest request,
-            Authentication authentication) throws Exception {
 
-        // 1. Find auction
-        Auction auction = auctionRepository
-                .findById(request.getAuctionId())
-                .orElseThrow(() ->
-                        new RuntimeException("Auction not found"));
-
-
-        // 2. Get winning bid
-        Bid winningBid = bidRepository
-                .findTopByAuctionOrderByAmountDesc(auction)
-                .orElseThrow(() ->
-                        new RuntimeException("Winning bid not found"));
-
-
-        // 3. Winning amount in paise
-        long expectedAmountInPaise =
-                winningBid.getAmount()
-                        .multiply(java.math.BigDecimal.valueOf(100))
-                        .longValueExact();
-
-
-        // 4. Verify Razorpay payment
-        boolean valid = razorpayService.verifyPayment(
-                request.getRazorpayOrderId(),
-                request.getRazorpayPaymentId(),
-                request.getRazorpaySignature(),
-                auction.getArtwork().getId(),
-                expectedAmountInPaise
-        );
-
-
-        // 5. Stop if payment verification fails
-        if (!valid) {
-            throw new RuntimeException(
-                    "Auction payment verification failed"
-            );
-        }
-
-
-        // 6. Complete purchase
-        return purchaseService.completeAuctionPurchase(
-                request.getAuctionId(),
-                authentication
-        );
-    }
     @PostMapping("/commission/verify")
     public String verifyCommissionPayment(
             @RequestBody PaymentVerificationRequest request,
             Authentication authentication) throws Exception {
 
-        // 1. Find commission
-        Commission commission =
-                commissionRepository.findById(
-                        request.getCommissionId()
-                ).orElseThrow(() ->
-                        new RuntimeException("Commission not found"));
-
-        // 2. Only the client can make the payment
-        if (!commission.getClient().getEmail()
-                .equals(authentication.getName())) {
-
-            throw new RuntimeException(
-                    "Only the commission client can make payment"
-            );
+        if (request.getCommissionId() == null) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST, "Commission ID is required");
         }
 
-        // 3. Commission must be delivered
-        if (commission.getStatus()
-                != CommissionStatus.DELIVERED) {
+        String commissionId = String.valueOf(request.getCommissionId());
+        String email = currentEmail(authentication);
 
-            throw new RuntimeException(
-                    "Commission is not ready for payment"
-            );
+        DocumentSnapshot commission = getDocument(
+                COMMISSIONS, commissionId, "Commission not found");
+
+        String clientEmail = commission.getString("clientEmail");
+        if (clientEmail == null || !email.equalsIgnoreCase(clientEmail)) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "Only the commission client can make payment");
         }
 
-        // 4. Prevent duplicate payment
-        if (commission.getPaymentStatus()
-                == CommissionPaymentStatus.PAID) {
-
-            throw new RuntimeException(
-                    "Commission has already been paid"
-            );
+        if (!CommissionStatus.DELIVERED.name()
+                .equals(commission.getString("status"))) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Commission is not ready for payment");
         }
 
-        // 5. Find selected offer
-        CommissionOffer selectedOffer =
-                commissionOfferRepository
-                        .findByCommission(commission)
-                        .stream()
-                        .filter(offer ->
-                                offer.getStatus()
-                                        == CommissionOfferStatus.SELECTED)
-                        .findFirst()
-                        .orElseThrow(() ->
-                                new RuntimeException(
-                                        "Selected offer not found"
-                                ));
+        if (CommissionPaymentStatus.PAID.name()
+                .equals(commission.getString("paymentStatus"))) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT, "Commission has already been paid");
+        }
 
-        // 6. Get accepted offer amount
-        BigDecimal amount =
-                selectedOffer.getProposedFee();
+        String storedOrderId = commission.getString("razorpayOrderId");
+        if (storedOrderId == null
+                || !storedOrderId.equals(request.getRazorpayOrderId())) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Payment order does not match this commission");
+        }
 
-        long expectedAmountInPaise =
-                amount
-                        .multiply(BigDecimal.valueOf(100))
-                        .longValueExact();
+        QuerySnapshot offers = query(
+                firestore.collection(OFFERS)
+                        .whereEqualTo("commissionId", commissionId)
+                        .whereEqualTo("status",
+                                CommissionOfferStatus.SELECTED.name())
+                        .limit(1));
 
-        // 7. Verify payment with Razorpay
-        boolean valid =
-                razorpayService.verifyCommissionPayment(
-                        request.getRazorpayOrderId(),
-                        request.getRazorpayPaymentId(),
-                        request.getRazorpaySignature(),
-                        commission.getId(),
-                        expectedAmountInPaise
-                );
+        if (offers.isEmpty()) {
+            throw new ResponseStatusException(
+                    HttpStatus.NOT_FOUND, "Selected offer not found");
+        }
 
-        // 8. Stop if verification fails
+        QueryDocumentSnapshot offer = offers.getDocuments().get(0);
+        BigDecimal fee = readMoney(offer, "proposedFee");
+        long expectedAmount = toPaise(fee);
+
+        boolean valid = razorpayService.verifyCommissionPayment(
+                request.getRazorpayOrderId(),
+                request.getRazorpayPaymentId(),
+                request.getRazorpaySignature(),
+                request.getCommissionId(),
+                expectedAmount);
+
         if (!valid) {
-            throw new RuntimeException(
-                    "Commission payment verification failed"
-            );
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Commission payment verification failed");
         }
 
-        // 9. Mark payment as paid
-        commission.setPaymentStatus(
-                CommissionPaymentStatus.PAID
-        );
+        // Persist payment identifiers and statuses in Firestore.
+        Map<String, Object> update = new HashMap<>();
+        update.put("paymentStatus", CommissionPaymentStatus.PAID.name());
+        update.put("status", CommissionStatus.COMPLETED.name());
+        update.put("razorpayOrderId", request.getRazorpayOrderId());
+        update.put("razorpayPaymentId", request.getRazorpayPaymentId());
+        update.put("updatedAt", LocalDateTime.now().toString());
 
-        // 10. Mark commission as completed
-        commission.setStatus(
-                CommissionStatus.COMPLETED
-        );
+        try {
+            firestore.collection(COMMISSIONS)
+                    .document(commissionId)
+                    .update(update)
+                    .get();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new ResponseStatusException(
+                    HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Saving commission payment was interrupted");
+        } catch (ExecutionException e) {
+            throw new ResponseStatusException(
+                    HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Could not save commission payment");
+        }
 
-        commissionRepository.save(commission);
+        // Resolve the selected artist's Firestore user profile.
+        String artistUid = offer.getString("artistUid");
+        User artist = userService.getUserByUid(artistUid);
+        User client = userService.getUserByEmail(clientEmail);
 
-        // 11. Notify artist
         notificationService.createNotification(
-                selectedOffer.getArtist(),
-                commission.getClient(),
+                artist,
+                client,
                 "Commission Payment Received",
-                "Payment of ₹"
-                        + amount
+                "Payment of ₹" + fee
                         + " has been completed for your commission \""
-                        + commission.getTitle()
-                        + "\".",
-                NotificationType.COMMISSION
-        );
+                        + commission.getString("title") + "\".",
+                NotificationType.COMMISSION);
 
         return "Commission payment completed successfully";
     }

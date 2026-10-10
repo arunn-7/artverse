@@ -1,7 +1,6 @@
 package com.artverse.controller;
 
-import com.artverse.service.LikeService;
-import org.springframework.beans.factory.annotation.Autowired;
+import com.artverse.service.FirestoreLikeService;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
@@ -9,25 +8,27 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("/api/artworks")
 public class LikeController {
 
-    @Autowired
-    private LikeService likeService;
+    private final FirestoreLikeService likeService;
+
+    public LikeController(FirestoreLikeService likeService) {
+        this.likeService = likeService;
+    }
 
     @PostMapping("/{artworkId}/like")
-    public String likeArtwork(@PathVariable Long artworkId,
-                              Authentication authentication) {
+    public String likeArtwork(
+            @PathVariable String artworkId,
+            Authentication authentication) {
 
         return likeService.likeArtwork(
-                artworkId,
-                authentication.getName()
-        );
+                artworkId, authentication.getName());
     }
+
     @PostMapping("/{artworkId}/unlike")
-    public String unlikeArtwork(@PathVariable Long artworkId,
-                                Authentication authentication) {
+    public String unlikeArtwork(
+            @PathVariable String artworkId,
+            Authentication authentication) {
 
         return likeService.unlikeArtwork(
-                artworkId,
-                authentication.getName()
-        );
+                artworkId, authentication.getName());
     }
 }

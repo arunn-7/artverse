@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "848438809694",
+    "project_id": "artverse-33920",
+    "storage_bucket": "artverse-33920.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:848438809694:android:a7884d3d75a1be4c9710cf",
+        "android_client_info": {
+          "package_name": "com.artverse.artverse"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDZZpAnGsyXi99E1A4IRz3dgOlbJggk_3E"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

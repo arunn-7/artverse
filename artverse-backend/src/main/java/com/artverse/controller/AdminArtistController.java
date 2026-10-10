@@ -2,66 +2,141 @@ package com.artverse.controller;
 
 import com.artverse.dto.AdminArtistDetailsResponse;
 import com.artverse.entity.User;
-import com.artverse.repository.UserRepository;
-import org.springframework.beans.factory.annotation.Autowired;
+import com.artverse.service.ArtworkService;
+import com.artverse.service.FirestoreUserService;
+import com.artverse.service.FollowService;
+import com.google.cloud.firestore.DocumentSnapshot;
+import com.google.cloud.firestore.Firestore;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ExecutionException;
 
 @RestController
 @RequestMapping("/api/admin/artists")
 public class AdminArtistController {
 
-    @Autowired
-    private UserRepository userRepository;
+    private final Firestore firestore;
+    private final FirestoreUserService userService;
+    private final ArtworkService artworkService;
+    private final FollowService followService;
 
-
-    // ==========================================
-    // GET ALL ARTISTS
-    // ==========================================
+    public AdminArtistController(
+            Firestore firestore,
+            FirestoreUserService userService,
+            ArtworkService artworkService,
+            FollowService followService) {
+        this.firestore = firestore;
+        this.userService = userService;
+        this.artworkService = artworkService;
+        this.followService = followService;
+    }
 
     @GetMapping
     public List<AdminArtistDetailsResponse> getAllArtists() {
+        try {
+            List<? extends DocumentSnapshot> documents = firestore
+                    .collection("users")
+                    .whereEqualTo("accountType", "ARTIST")
+                    .get()
+                    .get()
+                    .getDocuments();
 
-        return userRepository
-                .findByAccountType("ARTIST")
-                .stream()
-                .map(this::convertToResponse)
-                .toList();
+            List<AdminArtistDetailsResponse> responses =
+                    new ArrayList<>();
+
+            for (DocumentSnapshot document : documents) {
+                String email = document.getString("email");
+                String uid = document.getString("userUid");
+
+                // Skip legacy profiles without Firebase UIDs.
+                if (email == null || uid == null || uid.isBlank()) {
+                    continue;
+                }
+
+                User artist = userService.getUserByEmail(email);
+                responses.add(convertToResponse(artist));
+            }
+
+            return responses;
+
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new ResponseStatusException(
+                    HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Artist retrieval interrupted");
+        } catch (ExecutionException e) {
+            throw new ResponseStatusException(
+                    HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Failed to retrieve artists");
+        }
     }
-
-
-    // ==========================================
-    // GET ARTIST BY ID
-    // ==========================================
 
     @GetMapping("/{id}")
     public AdminArtistDetailsResponse getArtistById(
-            @PathVariable Long id) {
+            @PathVariable String id) {
+        try {
+            List<? extends DocumentSnapshot> documents = firestore
+                    .collection("users")
+                    .whereEqualTo("userUid", id)
+                    .whereEqualTo("accountType", "ARTIST")
+                    .limit(1)
+                    .get()
+                    .get()
+                    .getDocuments();
 
-        User artist = userRepository
-                .findById(id)
-                .orElseThrow(() ->
-                        new RuntimeException("Artist not found")
-                );
+            if (documents.isEmpty()) {
+                throw new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Artist not found");
+            }
 
-        if (!"ARTIST".equals(artist.getAccountType())) {
-            throw new RuntimeException("User is not an artist");
+            String email = documents.get(0).getString("email");
+
+            if (email == null) {
+                throw new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Artist email not found");
+            }
+
+            User artist = userService.getUserByEmail(email);
+
+            if (artist.getUserUid() == null
+                    || artist.getUserUid().isBlank()) {
+                throw new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Artist Firebase UID is missing");
+            }
+
+            return convertToResponse(artist);
+
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new ResponseStatusException(
+                    HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Artist retrieval interrupted");
+        } catch (ExecutionException e) {
+            throw new ResponseStatusException(
+                    HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Failed to retrieve artist");
         }
-
-        return convertToResponse(artist);
     }
 
+    private AdminArtistDetailsResponse convertToResponse(User artist) {
+        long artworkCount =
+                artworkService.getMyArtworks(artist).size();
 
-    // ==========================================
-    // CONVERT USER → ADMIN ARTIST RESPONSE
-    // ==========================================
+        long followers =
+                followService.getFollowersCount(artist);
 
-    private AdminArtistDetailsResponse convertToResponse(
-            User artist) {
+        long following =
+                followService.getFollowingCount(artist);
 
         return new AdminArtistDetailsResponse(
-                artist.getId(),
+                artist.getUserUid(),
                 artist.getFullName(),
                 artist.getEmail(),
                 artist.getAccountType(),
@@ -69,9 +144,9 @@ public class AdminArtistController {
                 artist.getVerificationStatus(),
                 artist.getBio(),
                 artist.getProfileImageUrl(),
-                0L,
-                0L,
-                0L,
+                artworkCount,
+                followers,
+                following,
                 artist.getCreatedAt()
         );
     }

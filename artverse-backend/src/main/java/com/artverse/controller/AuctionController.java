@@ -1,12 +1,11 @@
 package com.artverse.controller;
 
-import com.artverse.entity.Auction;
-import com.artverse.entity.Bid;
-import com.artverse.service.AuctionService;
-import org.springframework.beans.factory.annotation.Autowired;
+import com.artverse.model.FirestoreAuction;
+import com.artverse.model.FirestoreBid;
+import com.artverse.service.FirestoreAuctionService;
+
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
-import com.artverse.dto.AuctionResponse;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -16,17 +15,15 @@ import java.util.List;
 @RequestMapping("/api/auctions")
 public class AuctionController {
 
-    @Autowired
-    private AuctionService auctionService;
+    private final FirestoreAuctionService auctionService;
 
-
-    // ==========================================
-    // CREATE AUCTION
-    // ==========================================
+    public AuctionController(FirestoreAuctionService auctionService) {
+        this.auctionService = auctionService;
+    }
 
     @PostMapping("/create")
     public String createAuction(
-            @RequestParam Long artworkId,
+            @RequestParam String artworkId,
             @RequestParam BigDecimal startingPrice,
             @RequestParam LocalDateTime startTime,
             @RequestParam LocalDateTime endTime,
@@ -41,14 +38,9 @@ public class AuctionController {
         );
     }
 
-
-    // ==========================================
-    // PLACE BID
-    // ==========================================
-
     @PostMapping("/{auctionId}/bid")
     public String placeBid(
-            @PathVariable Long auctionId,
+            @PathVariable String auctionId,
             @RequestParam BigDecimal amount,
             Authentication authentication) {
 
@@ -59,50 +51,39 @@ public class AuctionController {
         );
     }
 
-
-    // ==========================================
-    // GET AUCTION
-    // ==========================================
-
     @GetMapping("/{auctionId}")
-    public AuctionResponse getAuction(
-            @PathVariable Long auctionId) {
+    public FirestoreAuction getAuction(
+            @PathVariable String auctionId) {
 
-        return auctionService.getAuctionResponse(auctionId);
+        return auctionService.getAuction(auctionId);
     }
 
-
-    // ==========================================
-    // GET BIDS
-    // ==========================================
-
     @GetMapping("/{auctionId}/bids")
-    public List<Bid> getAuctionBids(
-            @PathVariable Long auctionId) {
+    public List<FirestoreBid> getAuctionBids(
+            @PathVariable String auctionId) {
 
         return auctionService.getAuctionBids(auctionId);
     }
 
-
-    // ==========================================
-    // END AUCTION
-    // ==========================================
-
     @PostMapping("/{auctionId}/end")
     public String endAuction(
-            @PathVariable Long auctionId) {
+            @PathVariable String auctionId) {
 
         return auctionService.endAuction(auctionId);
     }
 
     @GetMapping
-    public List<AuctionResponse> getActiveAuctions() {
-
+    public List<FirestoreAuction> getActiveAuctions() {
         return auctionService.getActiveAuctions();
     }
 
     @GetMapping("/upcoming")
-    public List<AuctionResponse> getUpcomingAuctions() {
+    public List<FirestoreAuction> getUpcomingAuctions() {
         return auctionService.getUpcomingAuctions();
+    }
+
+    @GetMapping("/all")
+    public List<FirestoreAuction> getAllAuctions() {
+        return auctionService.getAllAuctions();
     }
 }

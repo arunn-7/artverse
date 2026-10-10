@@ -4,7 +4,7 @@ import java.time.LocalDateTime;
 
 public class AdminArtistDetailsResponse {
 
-    private Long id;
+    private String id;
     private String fullName;
     private String email;
     private String accountType;
@@ -19,21 +19,11 @@ public class AdminArtistDetailsResponse {
 
     private LocalDateTime createdAt;
 
-
-    // ==========================================
-    // DEFAULT CONSTRUCTOR
-    // ==========================================
-
     public AdminArtistDetailsResponse() {
     }
 
-
-    // ==========================================
-    // FULL CONSTRUCTOR
-    // ==========================================
-
     public AdminArtistDetailsResponse(
-            Long id,
+            String id,
             String fullName,
             String email,
             String accountType,
@@ -60,108 +50,46 @@ public class AdminArtistDetailsResponse {
         this.createdAt = createdAt;
     }
 
+    public String getId() { return id; }
+    public void setId(String id) { this.id = id; }
 
-    // ==========================================
-    // GETTERS
-    // ==========================================
+    public String getFullName() { return fullName; }
+    public void setFullName(String fullName) { this.fullName = fullName; }
 
-    public Long getId() {
-        return id;
-    }
+    public String getEmail() { return email; }
+    public void setEmail(String email) { this.email = email; }
 
-    public String getFullName() {
-        return fullName;
-    }
+    public String getAccountType() { return accountType; }
+    public void setAccountType(String accountType) { this.accountType = accountType; }
 
-    public String getEmail() {
-        return email;
-    }
+    public String getArtistLevel() { return artistLevel; }
+    public void setArtistLevel(String artistLevel) { this.artistLevel = artistLevel; }
 
-    public String getAccountType() {
-        return accountType;
-    }
-
-    public String getArtistLevel() {
-        return artistLevel;
-    }
-
-    public String getVerificationStatus() {
-        return verificationStatus;
-    }
-
-    public String getBio() {
-        return bio;
-    }
-
-    public String getProfileImageUrl() {
-        return profileImageUrl;
-    }
-
-    public Long getArtworkCount() {
-        return artworkCount;
-    }
-
-    public Long getFollowers() {
-        return followers;
-    }
-
-    public Long getFollowing() {
-        return following;
-    }
-
-    public LocalDateTime getCreatedAt() {
-        return createdAt;
-    }
-
-
-    // ==========================================
-    // SETTERS
-    // ==========================================
-
-    public void setId(Long id) {
-        this.id = id;
-    }
-
-    public void setFullName(String fullName) {
-        this.fullName = fullName;
-    }
-
-    public void setEmail(String email) {
-        this.email = email;
-    }
-
-    public void setAccountType(String accountType) {
-        this.accountType = accountType;
-    }
-
-    public void setArtistLevel(String artistLevel) {
-        this.artistLevel = artistLevel;
-    }
-
+    public String getVerificationStatus() { return verificationStatus; }
     public void setVerificationStatus(String verificationStatus) {
         this.verificationStatus = verificationStatus;
     }
 
-    public void setBio(String bio) {
-        this.bio = bio;
-    }
+    public String getBio() { return bio; }
+    public void setBio(String bio) { this.bio = bio; }
 
+    public String getProfileImageUrl() { return profileImageUrl; }
     public void setProfileImageUrl(String profileImageUrl) {
         this.profileImageUrl = profileImageUrl;
     }
 
+    public Long getArtworkCount() { return artworkCount; }
     public void setArtworkCount(Long artworkCount) {
         this.artworkCount = artworkCount;
     }
 
-    public void setFollowers(Long followers) {
-        this.followers = followers;
-    }
+    public Long getFollowers() { return followers; }
+    public void setFollowers(Long followers) { this.followers = followers; }
 
-    public void setFollowing(Long following) {
-        this.following = following;
-    }
+    public Long getFollowing() { return following; }
+    public void setFollowing(Long following) { this.following = following; }
 
+    public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) {
         this.createdAt = createdAt;
     }

@@ -1,128 +1,185 @@
 package com.artverse.service;
 
-import com.artverse.entity.Certificate;
 import com.artverse.entity.User;
-import com.artverse.repository.CertificateRepository;
-import com.artverse.repository.UserRepository;
-import org.springframework.beans.factory.annotation.Autowired;
+import com.google.cloud.firestore.DocumentSnapshot;
+import com.google.cloud.firestore.Firestore;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.time.Instant;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.concurrent.ExecutionException;
 
 @Service
 public class CertificateService {
 
-    @Autowired
-    private CertificateRepository certificateRepository;
+    private final Firestore firestore;
+    private final FirestoreUserService userService;
+    private final CloudinaryService cloudinaryService;
 
-    @Autowired
-    private UserRepository userRepository;
-
-    @Autowired
-    private CloudinaryService cloudinaryService;
-
+    public CertificateService(
+            Firestore firestore,
+            FirestoreUserService userService,
+            CloudinaryService cloudinaryService) {
+        this.firestore = firestore;
+        this.userService = userService;
+        this.cloudinaryService = cloudinaryService;
+    }
 
     public String uploadCertificate(
             MultipartFile file,
             String certificateName,
-            String userEmail
-    ) throws IOException {
+            String userEmail) throws IOException {
 
-        // Find logged-in user
-        User user = userRepository
-                .findByEmail(userEmail)
-                .orElseThrow(() ->
-                        new RuntimeException("User not found")
-                );
+        User user = userService.getUserByEmail(
+                userEmail.trim().toLowerCase()
+        );
 
+        if (user == null) {
+            throw new RuntimeException("User not found");
+        }
 
-        // Make sure the user is an artist
-        if (!"ARTIST".equals(user.getAccountType())) {
+        if (!"ARTIST".equalsIgnoreCase(user.getAccountType())) {
             throw new RuntimeException(
                     "Only artists can upload certificates"
             );
         }
 
-
-        // Make sure certificate is required
-        if ("BEGINNER".equals(user.getArtistLevel())) {
+        if ("BEGINNER".equalsIgnoreCase(user.getArtistLevel())) {
             throw new RuntimeException(
                     "Beginner artists do not require certificates"
             );
         }
 
+        if (user.getUserUid() == null
+                || user.getUserUid().isBlank()) {
+            throw new RuntimeException(
+                    "Artist Firebase UID is missing"
+            );
+        }
 
-        // Validate file
         if (file == null || file.isEmpty()) {
             throw new RuntimeException(
                     "Certificate file is required"
             );
         }
 
+        if (certificateName == null
+                || certificateName.isBlank()) {
+            throw new RuntimeException(
+                    "Certificate name is required"
+            );
+        }
 
-        // Upload certificate to Cloudinary
+        // Upload file using the existing Cloudinary service
         String certificateUrl =
                 cloudinaryService.uploadCertificate(file);
 
+        // Save certificate metadata in Firestore
+        Map<String, Object> data = new HashMap<>();
+        data.put("userUid", user.getUserUid());
+        data.put("userEmail", user.getEmail());
+        data.put("certificateName", certificateName.trim());
+        data.put("certificateUrl", certificateUrl);
+        data.put("verificationStatus", "PENDING");
+        data.put("uploadedAt", Instant.now().toString());
 
-        // Create certificate record
-        Certificate certificate = new Certificate();
+        try {
+            firestore.collection("certificates")
+                    .add(data)
+                    .get();
 
-        certificate.setUser(user);
-        certificate.setCertificateName(certificateName);
-        certificate.setCertificateUrl(certificateUrl);
-        certificate.setVerificationStatus("PENDING");
+            user.setVerificationStatus("PENDING");
+            userService.save(user);
 
+            return "Certificate uploaded successfully";
 
-        // Save certificate information
-        certificateRepository.save(certificate);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException(
+                    "Certificate upload was interrupted", e
+            );
 
-
-        // Keep artist verification pending
-        user.setVerificationStatus("PENDING");
-
-        userRepository.save(user);
-
-
-        return "Certificate uploaded successfully";
-    }
-    public String approveCertificate(Long certificateId) {
-
-        Certificate certificate = certificateRepository
-                .findById(certificateId)
-                .orElseThrow(() ->
-                        new RuntimeException("Certificate not found")
-                );
-
-        certificate.setVerificationStatus("APPROVED");
-        certificateRepository.save(certificate);
-
-        User artist = certificate.getUser();
-
-        artist.setVerificationStatus("APPROVED");
-        userRepository.save(artist);
-
-        return "Certificate approved successfully";
+        } catch (ExecutionException e) {
+            throw new RuntimeException(
+                    "Failed to save certificate in Firestore", e
+            );
+        }
     }
 
+    public String approveCertificate(String certificateId) {
+        return updateCertificateStatus(
+                certificateId, "APPROVED"
+        );
+    }
 
-    public String rejectCertificate(Long certificateId) {
+    public String rejectCertificate(String certificateId) {
+        return updateCertificateStatus(
+                certificateId, "REJECTED"
+        );
+    }
 
-        Certificate certificate = certificateRepository
-                .findById(certificateId)
-                .orElseThrow(() ->
-                        new RuntimeException("Certificate not found")
+    private String updateCertificateStatus(
+            String certificateId,
+            String status) {
+
+        try {
+            var certificateRef = firestore
+                    .collection("certificates")
+                    .document(certificateId);
+
+            DocumentSnapshot document =
+                    certificateRef.get().get();
+
+            if (!document.exists()) {
+                throw new RuntimeException(
+                        "Certificate not found"
                 );
+            }
 
-        certificate.setVerificationStatus("REJECTED");
-        certificateRepository.save(certificate);
+            String userEmail = document.getString("userEmail");
 
-        User artist = certificate.getUser();
+            if (userEmail == null || userEmail.isBlank()) {
+                throw new RuntimeException(
+                        "Certificate owner email is missing"
+                );
+            }
 
-        artist.setVerificationStatus("REJECTED");
-        userRepository.save(artist);
+            User artist = userService.getUserByEmail(userEmail);
 
-        return "Certificate rejected successfully";
+            if (artist == null
+                    || !"ARTIST".equalsIgnoreCase(
+                    artist.getAccountType())) {
+                throw new RuntimeException(
+                        "Certificate owner is not a valid artist"
+                );
+            }
+
+            // Update certificate status
+            certificateRef.update(
+                    "verificationStatus", status
+            ).get();
+
+            // Update artist verification status
+            artist.setVerificationStatus(status);
+            userService.save(artist);
+
+            return status.equals("APPROVED")
+                    ? "Certificate approved successfully"
+                    : "Certificate rejected successfully";
+
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException(
+                    "Certificate verification was interrupted", e
+            );
+
+        } catch (ExecutionException e) {
+            throw new RuntimeException(
+                    "Failed to update certificate status", e
+            );
+        }
     }
 }

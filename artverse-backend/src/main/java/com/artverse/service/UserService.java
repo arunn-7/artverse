@@ -1,35 +1,33 @@
 package com.artverse.service;
 
 import com.artverse.dto.UserResponse;
+import com.artverse.dto.UpdateProfileRequest;
+import com.artverse.dto.UserSummaryResponse;
+import com.artverse.dto.PublicUserProfileResponse;
 import com.artverse.entity.User;
-import com.artverse.exception.UserNotFoundException;
-import com.artverse.repository.ArtworkRepository;
-import com.artverse.repository.UserRepository;
+import com.google.cloud.firestore.DocumentSnapshot;
+import com.google.cloud.firestore.Firestore;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
-import com.artverse.dto.UpdateProfileRequest;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.server.ResponseStatusException;
+
 import java.io.IOException;
-import com.artverse.repository.FollowRepository;
-import com.artverse.dto.UserSummaryResponse;
+import java.util.ArrayList;
 import java.util.List;
-import com.artverse.dto.PublicUserProfileResponse;
-
-
-
+import java.util.Locale;
+import java.util.concurrent.ExecutionException;
 
 @Service
 public class UserService {
 
     @Autowired
-    private UserRepository userRepository;
+    private Firestore firestore;
 
     @Autowired
-    private ArtworkRepository artworkRepository;
-
-    @Autowired
-    private FollowRepository followRepository;
+    private FirestoreUserService firestoreUserService;
 
     @Autowired
     private CloudinaryService cloudinaryService;
@@ -37,140 +35,213 @@ public class UserService {
     @Autowired
     private ArtworkService artworkService;
 
-    public UserResponse getCurrentUserProfile(Authentication authentication) {
+    @Autowired
+    private FollowService followService;
 
-        User user = userRepository.findByEmail(authentication.getName())
-                .orElseThrow(() -> new UserNotFoundException("User not found"));
+    public UserResponse getCurrentUserProfile(
+            Authentication authentication) {
+
+        User user = firestoreUserService.getUserByEmail(
+                authentication.getName());
 
         UserResponse response = new UserResponse(
-                user.getId(),
+                null,
                 user.getFullName(),
                 user.getEmail(),
                 user.getRole(),
                 user.getBio(),
                 user.getProfileImageUrl(),
-                user.getCreatedAt()
-        );
+                user.getCreatedAt());
 
-        // Artist-specific information
-        if ("ARTIST".equals(user.getRole())) {
+        response.setArtworkCount(
+                (long) artworkService.getMyArtworks(user).size());
 
-            response.setArtworkCount(
-                    artworkRepository.countByUser(user)
-            );
-
-            response.setFollowers(
-                    followRepository.countByFollowing(user)
-            );
-
-            response.setFollowing(
-                    followRepository.countByFollower(user)
-            );
-        }
+        response.setFollowers(followService.getFollowersCount(user));
+        response.setFollowing(followService.getFollowingCount(user));
 
         return response;
     }
-    public String updateProfile(UpdateProfileRequest request,
-                                Authentication authentication) {
 
-        User user = userRepository.findByEmail(authentication.getName())
-                .orElseThrow(() -> new UserNotFoundException("User not found"));
+    public String updateProfile(
+            UpdateProfileRequest request,
+            Authentication authentication) {
+
+        User user = firestoreUserService.getUserByEmail(
+                authentication.getName());
 
         user.setFullName(request.getFullName());
         user.setBio(request.getBio());
 
-        userRepository.save(user);
+        saveUserProfile(user);
 
         return "Profile updated successfully";
     }
-    public String uploadProfilePicture(MultipartFile image,
-                                       Authentication authentication) throws IOException {
 
-        User user = userRepository.findByEmail(authentication.getName())
-                .orElseThrow(() -> new UserNotFoundException("User not found"));
+    public String uploadProfilePicture(
+            MultipartFile image,
+            Authentication authentication) throws IOException {
+
+        User user = firestoreUserService.getUserByEmail(
+                authentication.getName());
 
         String imageUrl = cloudinaryService.uploadImage(image);
-
         user.setProfileImageUrl(imageUrl);
 
-        userRepository.save(user);
+        saveUserProfile(user);
 
         return "Profile picture updated successfully";
     }
+
     public List<UserSummaryResponse> searchUsers(String keyword) {
 
-        return userRepository.findByFullNameContainingIgnoreCase(keyword)
-                .stream()
-                .map(user -> new UserSummaryResponse(
-                        user.getId(),
-                        user.getFullName(),
-                        user.getProfileImageUrl()
-                ))
-                .toList();
+        if (keyword == null || keyword.isBlank()) {
+            return new ArrayList<>();
+        }
+
+        try {
+            List<? extends DocumentSnapshot> documents = firestore
+                    .collection("users")
+                    .get()
+                    .get()
+                    .getDocuments();
+
+            List<UserSummaryResponse> results = new ArrayList<>();
+            String searchTerm = keyword.toLowerCase(Locale.ROOT);
+
+            for (DocumentSnapshot document : documents) {
+                String fullName = document.getString("fullName");
+                String uid = document.getString("userUid");
+
+                if (fullName != null
+                        && uid != null
+                        && fullName.toLowerCase(Locale.ROOT)
+                        .contains(searchTerm)) {
+
+                    results.add(new UserSummaryResponse(
+                            uid,
+                            fullName,
+                            document.getString("profileImageUrl")));
+                }
+            }
+
+            return results;
+
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new ResponseStatusException(
+                    HttpStatus.INTERNAL_SERVER_ERROR,
+                    "User search interrupted");
+        } catch (ExecutionException e) {
+            throw new ResponseStatusException(
+                    HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Failed to search users");
+        }
     }
-    public PublicUserProfileResponse getPublicProfile(Long userId,
-                                                      Authentication authentication) {
 
-        User profileUser = userRepository.findById(userId)
-                .orElseThrow(() -> new UserNotFoundException("User not found"));
+    public PublicUserProfileResponse getPublicProfile(
+            String userUid,
+            Authentication authentication) {
 
-        User currentUser = userRepository.findByEmail(authentication.getName())
-                .orElseThrow(() -> new UserNotFoundException("User not found"));
+        User profileUser = firestoreUserService.getUserByUid(userUid);
 
-        boolean isFollowing = followRepository.existsByFollowerAndFollowing(
-                currentUser,
-                profileUser
-        );
+        List<com.artverse.dto.ArtworkFeedResponse> artworks =
+                artworkService.getMyArtworks(profileUser);
+
+        long followers = followService.getFollowersCount(profileUser);
+        long following = followService.getFollowingCount(profileUser);
+
+        boolean isFollowing = false;
+
+        if (authentication != null
+                && authentication.getName() != null) {
+
+            User currentUser = firestoreUserService.getUserByEmail(
+                    authentication.getName());
+
+            if (currentUser.getUserUid() != null
+                    && !currentUser.getUserUid().equals(userUid)) {
+
+                try {
+                    String followDocumentId =
+                            currentUser.getUserUid() + "_" + userUid;
+
+                    isFollowing = firestore
+                            .collection("follows")
+                            .document(followDocumentId)
+                            .get()
+                            .get()
+                            .exists();
+
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new ResponseStatusException(
+                            HttpStatus.INTERNAL_SERVER_ERROR,
+                            "Follow status lookup interrupted");
+                } catch (ExecutionException e) {
+                    throw new ResponseStatusException(
+                            HttpStatus.INTERNAL_SERVER_ERROR,
+                            "Failed to retrieve follow status");
+                }
+            }
+        }
 
         return new PublicUserProfileResponse(
-                profileUser.getId(),
+                profileUser.getUserUid(),
                 profileUser.getFullName(),
                 profileUser.getBio(),
                 profileUser.getProfileImageUrl(),
-                artworkRepository.countByUser(profileUser),
-                followRepository.countByFollowing(profileUser),
-                followRepository.countByFollower(profileUser),
+                artworks.size(),
+                followers,
+                following,
                 isFollowing,
-                artworkService.getMyArtworks(profileUser)
-        );
+                artworks);
     }
+
     public String uploadCertificate(
             MultipartFile certificate,
             Authentication authentication) throws IOException {
 
-        User user = userRepository.findByEmail(authentication.getName())
-                .orElseThrow(() ->
-                        new UserNotFoundException("User not found"));
+        User user = firestoreUserService.getUserByEmail(
+                authentication.getName());
 
-        // Only artists can upload certificates
-        if (!"ARTIST".equals(user.getRole())) {
-            throw new RuntimeException(
-                    "Only artists can upload certificates"
-            );
+        if (!"ARTIST".equalsIgnoreCase(user.getAccountType())) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "Only artists can upload certificates");
         }
 
-        // Certificate required for Intermediate and Professional
-        if (!"INTERMEDIATE".equals(user.getArtistLevel())
-                && !"PROFESSIONAL".equals(user.getArtistLevel())) {
+        String level = user.getArtistLevel();
 
-            throw new RuntimeException(
-                    "Certificate is not required for this artist level"
-            );
+        if (!"INTERMEDIATE".equalsIgnoreCase(level)
+                && !"PROFESSIONAL".equalsIgnoreCase(level)) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Certificate is not required for this artist level");
         }
 
-        // Upload certificate to Cloudinary
         String certificateUrl =
                 cloudinaryService.uploadCertificate(certificate);
 
-        // Save URL
         user.setCertificateUrl(certificateUrl);
-
-        // Keep verification pending
         user.setVerificationStatus("PENDING");
 
-        userRepository.save(user);
+        saveUserProfile(user);
 
         return "Certificate uploaded successfully";
     }
 
+    private void saveUserProfile(User user) {
+        try {
+            firestoreUserService.save(user);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new ResponseStatusException(
+                    HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Profile update interrupted");
+        } catch (ExecutionException e) {
+            throw new ResponseStatusException(
+                    HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Failed to save profile");
+        }
+    }
 }

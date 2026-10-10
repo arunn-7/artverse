@@ -2,8 +2,8 @@ import 'package:http/http.dart' as http;
 import 'auth_service.dart';
 
 class LikeService {
-  static const String baseUrl =
-      'http://10.0.2.2:8080';
+  static const String baseUrl = 'http://10.117.106.58:8080';
+
 
   final AuthService authService =
   AuthService();

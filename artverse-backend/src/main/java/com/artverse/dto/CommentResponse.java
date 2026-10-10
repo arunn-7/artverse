@@ -4,7 +4,7 @@ import java.time.LocalDateTime;
 
 public class CommentResponse {
 
-    private Long id;
+    private String id;
     private String text;
     private String userName;
     private LocalDateTime createdAt;
@@ -12,7 +12,7 @@ public class CommentResponse {
     public CommentResponse() {
     }
 
-    public CommentResponse(Long id,
+    public CommentResponse(String id,
                            String text,
                            String userName,
                            LocalDateTime createdAt) {
@@ -22,11 +22,11 @@ public class CommentResponse {
         this.createdAt = createdAt;
     }
 
-    public Long getId() {
+    public String getId() {
         return id;
     }
 
-    public void setId(Long id) {
+    public void setId(String id) {
         this.id = id;
     }
 

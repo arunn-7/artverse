@@ -3,7 +3,7 @@ class AppConstants {
   static const String appName = 'ArtVerse';
 
   // Backend
-  static const String baseUrl = 'http://10.229.36.59:8080';
+  static const String baseUrl = 'http://10.117.106.58:8080';
   // API endpoints
   static const String loginEndpoint = '/api/auth/login';
   static const String registerEndpoint = '/api/auth/register';

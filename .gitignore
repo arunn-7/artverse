@@ -40,3 +40,15 @@ Thumbs.db
 .vscode/
 *.swp
 *.swo
+
+
+# =========================
+# Local database backup and archives
+# =========================
+/artverse_database/
+/artverse-backend.zip
+
+# Firebase private credentials
+**/firebase-adminsdk*.json
+**/*service-account*.json
+**/*serviceAccountKey*.json

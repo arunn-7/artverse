@@ -2,7 +2,7 @@ package com.artverse.dto;
 
 public class ArtworkResponse {
 
-    private Long id;
+    private String id;
     private String title;
     private String description;
     private String imageUrl;
@@ -12,13 +12,13 @@ public class ArtworkResponse {
     public ArtworkResponse() {
     }
 
-    public ArtworkResponse(Long id,
-                           String title,
-                           String description,
-                           String imageUrl,
-                           String category,
-                           String artistName) {
-
+    public ArtworkResponse(
+            String id,
+            String title,
+            String description,
+            String imageUrl,
+            String category,
+            String artistName) {
         this.id = id;
         this.title = title;
         this.description = description;
@@ -27,11 +27,11 @@ public class ArtworkResponse {
         this.artistName = artistName;
     }
 
-    public Long getId() {
+    public String getId() {
         return id;
     }
 
-    public void setId(Long id) {
+    public void setId(String id) {
         this.id = id;
     }
 

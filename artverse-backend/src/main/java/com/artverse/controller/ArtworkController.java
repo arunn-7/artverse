@@ -5,8 +5,8 @@ import com.artverse.dto.ArtworkRequest;
 import com.artverse.dto.ArtworkResponse;
 import com.artverse.dto.SellArtworkRequest;
 import com.artverse.entity.User;
-import com.artverse.repository.UserRepository;
 import com.artverse.service.ArtworkService;
+import com.artverse.service.FirestoreUserService;
 
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.validation.Valid;
@@ -17,7 +17,6 @@ import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
-
 import org.springframework.security.core.Authentication;
 
 import java.io.IOException;
@@ -28,249 +27,133 @@ import java.util.List;
 @SecurityRequirement(name = "Bearer Authentication")
 public class ArtworkController {
 
+
     @Autowired
-    private UserRepository userRepository;
+    private FirestoreUserService firestoreUserService;
 
     @Autowired
     private ArtworkService artworkService;
 
-
-    // =====================================================
-    // CHECK WHETHER LOGGED-IN USER IS AN ARTIST
-    // =====================================================
-
+    // Check whether the logged-in user is an artist
     private User requireArtist(Authentication authentication) {
 
-        User user = userRepository
-                .findByEmail(authentication.getName())
-                .orElseThrow(() ->
-                        new ResponseStatusException(
-                                HttpStatus.UNAUTHORIZED,
-                                "User not found"
-                        )
-                );
+        User user = firestoreUserService.getUserByEmail(
+                authentication.getName());
 
         if (!"ARTIST".equalsIgnoreCase(user.getAccountType())) {
-
             throw new ResponseStatusException(
                     HttpStatus.FORBIDDEN,
-                    "Only artists can perform this action"
-            );
+                    "Only artists can perform this action");
         }
 
         return user;
     }
 
-
-    // =====================================================
-    // UPLOAD ARTWORK
-    // ARTIST ONLY
-    // =====================================================
-
-    @PostMapping(
-            consumes = MediaType.MULTIPART_FORM_DATA_VALUE
-    )
+    // Upload artwork - artist only
+    @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public String uploadArtwork(
-
             @RequestParam String title,
-
-            @RequestParam(required = false)
-            String description,
-
+            @RequestParam(required = false) String description,
             @RequestParam String category,
-
             @RequestPart MultipartFile image,
-
-            Authentication authentication
-
-    ) throws IOException {
+            Authentication authentication) throws IOException {
 
         requireArtist(authentication);
 
         ArtworkRequest request = new ArtworkRequest();
-
         request.setTitle(title);
         request.setDescription(description);
         request.setCategory(category);
 
         return artworkService.uploadArtwork(
-                request,
-                image,
-                authentication
-        );
+                request, image, authentication);
     }
 
-
-    // =====================================================
-    // GET ALL ARTWORKS
-    // USER + ARTIST
-    // =====================================================
-
+    // Get all artworks
     @GetMapping
     public List<ArtworkResponse> getAllArtworks() {
-
         return artworkService.getAllArtworks();
     }
 
-
-    // =====================================================
-    // GET MY ARTWORKS
-    // ARTIST ONLY
-    // =====================================================
-
+    // Get artworks belonging to the logged-in artist
     @GetMapping("/my-artworks")
     public List<ArtworkFeedResponse> getMyArtworks(
-            Authentication authentication
-    ) {
+            Authentication authentication) {
 
-        User user = userRepository
-                .findByEmail(authentication.getName())
-                .orElseThrow(() ->
-                        new ResponseStatusException(
-                                HttpStatus.UNAUTHORIZED,
-                                "User not found"
-                        )
-                );
-
-        requireArtist(authentication);
-
+        User user = requireArtist(authentication);
         return artworkService.getMyArtworks(user);
     }
 
-
-    // =====================================================
-    // ARTWORK FEED
-    // USER + ARTIST
-    // =====================================================
-
+    // Artwork feed
     @GetMapping("/feed")
     public List<ArtworkFeedResponse> getFeed(
-            Authentication authentication
-    ) {
+            Authentication authentication) {
 
-        User currentUser = userRepository
-                .findByEmail(authentication.getName())
-                .orElseThrow(() ->
-                        new ResponseStatusException(
-                                HttpStatus.UNAUTHORIZED,
-                                "User not found"
-                        )
-                );
+        if (authentication == null) {
+            throw new ResponseStatusException(
+                    HttpStatus.UNAUTHORIZED,
+                    "Authentication required");
+        }
+
+        User currentUser = firestoreUserService.getUserByEmail(
+                authentication.getName());
 
         return artworkService.getArtworkFeed(currentUser);
     }
 
-
-    // =====================================================
-    // GET ARTWORK BY ID
-    // USER + ARTIST
-    // ID MUST BE NUMERIC
-    // =====================================================
-
-    @GetMapping("/{id:\\d+}")
+    // Get artwork by Firestore document ID
+    @GetMapping("/{id}")
     public ArtworkResponse getArtworkById(
-            @PathVariable Long id
-    ) {
-
+            @PathVariable String id) {
         return artworkService.getArtworkById(id);
     }
 
-
-    // =====================================================
-    // UPDATE ARTWORK
-    // ARTIST ONLY
-    // =====================================================
-
-    @PutMapping("/{id:\\d+}")
+    // Update artwork - artist only
+    @PutMapping("/{id}")
     public String updateArtwork(
-
-            @PathVariable Long id,
-
-            @Valid
-            @RequestBody ArtworkRequest request,
-
-            Authentication authentication
-
-    ) {
+            @PathVariable String id,
+            @Valid @RequestBody ArtworkRequest request,
+            Authentication authentication) {
 
         requireArtist(authentication);
 
         return artworkService.updateArtwork(
-                id,
-                request,
-                authentication
-        );
+                id, request, authentication);
     }
 
-
-    // =====================================================
-    // DELETE ARTWORK
-    // ARTIST ONLY
-    // =====================================================
-
-    @DeleteMapping("/{id:\\d+}")
+    // Delete artwork - artist only
+    @DeleteMapping("/{id}")
     public String deleteArtwork(
-
-            @PathVariable Long id,
-
-            Authentication authentication
-
-    ) {
+            @PathVariable String id,
+            Authentication authentication) {
 
         requireArtist(authentication);
 
-        return artworkService.deleteArtwork(
-                id,
-                authentication
-        );
+        return artworkService.deleteArtwork(id, authentication);
     }
 
-
-    // =====================================================
-    // PUT ARTWORK FOR SALE
-    // ARTIST ONLY
-    // =====================================================
-
-    @PutMapping("/{id:\\d+}/sell")
+    // Put artwork for sale - artist only
+    @PutMapping("/{id}/sell")
     public String sellArtwork(
-
-            @PathVariable Long id,
-
+            @PathVariable String id,
             @RequestBody SellArtworkRequest request,
-
-            Authentication authentication
-
-    ) {
+            Authentication authentication) {
 
         requireArtist(authentication);
 
         return artworkService.putArtworkForSale(
-                id,
-                request,
-                authentication
-        );
+                id, request, authentication);
     }
 
-
-    // =====================================================
-    // REMOVE ARTWORK FROM SALE
-    // ARTIST ONLY
-    // =====================================================
-
-    @PutMapping("/{id:\\d+}/remove-sale")
+    // Remove artwork from sale - artist only
+    @PutMapping("/{id}/remove-sale")
     public String removeArtworkFromSale(
-
-            @PathVariable Long id,
-
-            Authentication authentication
-
-    ) {
+            @PathVariable String id,
+            Authentication authentication) {
 
         requireArtist(authentication);
 
         return artworkService.removeArtworkFromSale(
-                id,
-                authentication
-        );
+                id, authentication);
     }
 }

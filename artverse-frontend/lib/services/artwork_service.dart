@@ -3,7 +3,7 @@ import 'package:http/http.dart' as http;
 import 'auth_service.dart';
 
 class ArtworkService {
-  static const String baseUrl = 'http://10.229.36.59:8080';
+  static const String baseUrl = 'http://10.117.106.58:8080';
 
   final AuthService authService = AuthService();
 

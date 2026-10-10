@@ -4,7 +4,7 @@ import java.util.List;
 
 public class PublicUserProfileResponse {
 
-    private Long id;
+    private String id;
     private String fullName;
     private String bio;
     private String profileImageUrl;
@@ -21,7 +21,7 @@ public class PublicUserProfileResponse {
     }
 
     public PublicUserProfileResponse(
-            Long id,
+            String id,
             String fullName,
             String bio,
             String profileImageUrl,
@@ -42,11 +42,11 @@ public class PublicUserProfileResponse {
         this.artworks = artworks;
     }
 
-    public Long getId() {
+    public String getId() {
         return id;
     }
 
-    public void setId(Long id) {
+    public void setId(String id) {
         this.id = id;
     }
 
@@ -103,7 +103,7 @@ public class PublicUserProfileResponse {
     }
 
     public void setFollowing(boolean following) {
-        isFollowing = following;
+        this.isFollowing = following;
     }
 
     public List<ArtworkFeedResponse> getArtworks() {

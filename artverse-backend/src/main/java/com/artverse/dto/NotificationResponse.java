@@ -4,29 +4,27 @@ import java.time.LocalDateTime;
 
 public class NotificationResponse {
 
-    private Long id;
+    private String id;
     private String title;
     private String message;
     private String type;
-
     private String senderName;
     private String senderProfileImage;
-
     private boolean read;
-
     private LocalDateTime createdAt;
 
     public NotificationResponse() {
     }
 
-    public NotificationResponse(Long id,
-                                String title,
-                                String message,
-                                String type,
-                                String senderName,
-                                String senderProfileImage,
-                                boolean read,
-                                LocalDateTime createdAt) {
+    public NotificationResponse(
+            String id,
+            String title,
+            String message,
+            String type,
+            String senderName,
+            String senderProfileImage,
+            boolean read,
+            LocalDateTime createdAt) {
 
         this.id = id;
         this.title = title;
@@ -38,23 +36,67 @@ public class NotificationResponse {
         this.createdAt = createdAt;
     }
 
-    public Long getId() { return id; }
+    public String getId() {
+        return id;
+    }
 
-    public String getTitle() { return title; }
+    public void setId(String id) {
+        this.id = id;
+    }
 
-    public String getMessage() { return message; }
+    public String getTitle() {
+        return title;
+    }
 
-    public String getType() { return type; }
+    public void setTitle(String title) {
+        this.title = title;
+    }
 
-    public String getSenderName() { return senderName; }
+    public String getMessage() {
+        return message;
+    }
 
-    public String getSenderProfileImage() { return senderProfileImage; }
+    public void setMessage(String message) {
+        this.message = message;
+    }
 
-    public boolean isRead() { return read; }
+    public String getType() {
+        return type;
+    }
 
-    public LocalDateTime getCreatedAt() { return createdAt; }
+    public void setType(String type) {
+        this.type = type;
+    }
+
+    public String getSenderName() {
+        return senderName;
+    }
+
+    public void setSenderName(String senderName) {
+        this.senderName = senderName;
+    }
+
+    public String getSenderProfileImage() {
+        return senderProfileImage;
+    }
+
+    public void setSenderProfileImage(String senderProfileImage) {
+        this.senderProfileImage = senderProfileImage;
+    }
+
+    public boolean isRead() {
+        return read;
+    }
 
     public void setRead(boolean read) {
         this.read = read;
+    }
+
+    public LocalDateTime getCreatedAt() {
+        return createdAt;
+    }
+
+    public void setCreatedAt(LocalDateTime createdAt) {
+        this.createdAt = createdAt;
     }
 }

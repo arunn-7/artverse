@@ -1,69 +1,102 @@
 package com.artverse.service;
 
 import com.artverse.entity.User;
-import com.artverse.repository.FollowRepository;
-import com.artverse.repository.UserRepository;
-import org.springframework.beans.factory.annotation.Autowired;
+import com.google.cloud.firestore.DocumentSnapshot;
+import com.google.cloud.firestore.Firestore;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
+import java.util.concurrent.ExecutionException;
+import com.google.cloud.firestore.QueryDocumentSnapshot;
+import java.util.List;
+
 
 @Service
 public class ArtistProgressionService {
 
-    @Autowired
-    private FollowRepository followRepository;
+    private final Firestore firestore;
+    private final FirestoreUserService userService;
+    private final FollowService followService;
 
-    @Autowired
-    private UserRepository userRepository;
+    public ArtistProgressionService(
+            Firestore firestore,
+            FirestoreUserService userService,
+            FollowService followService) {
+        this.firestore = firestore;
+        this.userService = userService;
+        this.followService = followService;
+    }
 
+    // Check and upgrade one artist
+    public void checkAndUpgradeArtist(User artist)
+            throws ExecutionException, InterruptedException {
 
-    // =====================================================
-    // CHECK ONE ARTIST
-    // =====================================================
-
-    public void checkAndUpgradeArtist(User artist) {
-
-        // Only artists can progress
-        if (!"ARTIST".equals(artist.getAccountType())) {
-            return;
+        if (artist != null) {
+            try {
+                checkAndUpgradeArtist(artist);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return;
+            } catch (ExecutionException e) {
+                throw new RuntimeException(
+                        "Failed to save artist progression", e);
+            }
         }
 
-        long followers =
-                followRepository.countByFollowing(artist);
+        long followers = followService.getFollowersCount(artist);
 
+        String currentLevel = artist.getArtistLevel();
 
-        // BEGINNER → INTERMEDIATE
-        if ("BEGINNER".equals(artist.getArtistLevel())
+        if ("BEGINNER".equalsIgnoreCase(currentLevel)
                 && followers >= 1000) {
 
             artist.setArtistLevel("INTERMEDIATE");
+            userService.save(artist);
 
-            userRepository.save(artist);
-
-            return;
-        }
-
-
-        // INTERMEDIATE → PROFESSIONAL
-        if ("INTERMEDIATE".equals(artist.getArtistLevel())
+        } else if ("INTERMEDIATE".equalsIgnoreCase(currentLevel)
                 && followers >= 5000) {
 
             artist.setArtistLevel("PROFESSIONAL");
-
-            userRepository.save(artist);
+            userService.save(artist);
         }
     }
 
-
-    // =====================================================
-    // AUTOMATIC PERIODIC CHECK
-    // =====================================================
-
+    // Automatically check all Firebase artists every hour
     @Scheduled(fixedRate = 3600000)
     public void checkAllArtists() {
 
-        userRepository
-                .findByAccountType("ARTIST")
-                .forEach(this::checkAndUpgradeArtist);
+        try {
+            List<QueryDocumentSnapshot> documents = firestore
+                    .collection("users")
+                    .whereEqualTo("accountType", "ARTIST")
+                    .get()
+                    .get()
+                    .getDocuments();
+
+            for (QueryDocumentSnapshot document : documents) {
+
+                String email = document.getString("email");
+                String uid = document.getString("userUid");
+
+                // Skip legacy profiles without Firebase UID
+                if (email == null || uid == null || uid.isBlank()) {
+                    continue;
+                }
+
+                User artist = userService.getUserByEmail(email);
+
+                if (artist != null) {
+                    checkAndUpgradeArtist(artist);
+                }
+            }
+
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException(
+                    "Artist progression check was interrupted", e);
+
+        } catch (ExecutionException e) {
+            throw new RuntimeException(
+                    "Failed to retrieve artists from Firestore", e);
+        }
     }
 }

@@ -1,3 +1,4 @@
+
 package com.artverse.dto;
 
 import com.artverse.entity.CommissionOfferStatus;
@@ -6,9 +7,9 @@ import java.time.LocalDateTime;
 
 public class CommissionOfferResponse {
 
-    private Long id;
-    private Long commissionId;
-    private Long artistId;
+    private String id;
+    private String commissionId;
+    private String artistId;
     private String artistName;
     private BigDecimal proposedFee;
     private Integer estimatedDays;
@@ -17,9 +18,9 @@ public class CommissionOfferResponse {
     private LocalDateTime createdAt;
 
     public CommissionOfferResponse(
-            Long id,
-            Long commissionId,
-            Long artistId,
+            String id,
+            String commissionId,
+            String artistId,
             String artistName,
             BigDecimal proposedFee,
             Integer estimatedDays,
@@ -38,39 +39,75 @@ public class CommissionOfferResponse {
         this.createdAt = createdAt;
     }
 
-    public Long getId() {
+    public String getId() {
         return id;
     }
 
-    public Long getCommissionId() {
+    public void setId(String id) {
+        this.id = id;
+    }
+
+    public String getCommissionId() {
         return commissionId;
     }
 
-    public Long getArtistId() {
+    public void setCommissionId(String commissionId) {
+        this.commissionId = commissionId;
+    }
+
+    public String getArtistId() {
         return artistId;
+    }
+
+    public void setArtistId(String artistId) {
+        this.artistId = artistId;
     }
 
     public String getArtistName() {
         return artistName;
     }
 
+    public void setArtistName(String artistName) {
+        this.artistName = artistName;
+    }
+
     public BigDecimal getProposedFee() {
         return proposedFee;
+    }
+
+    public void setProposedFee(BigDecimal proposedFee) {
+        this.proposedFee = proposedFee;
     }
 
     public Integer getEstimatedDays() {
         return estimatedDays;
     }
 
+    public void setEstimatedDays(Integer estimatedDays) {
+        this.estimatedDays = estimatedDays;
+    }
+
     public String getMessage() {
         return message;
+    }
+
+    public void setMessage(String message) {
+        this.message = message;
     }
 
     public CommissionOfferStatus getStatus() {
         return status;
     }
 
+    public void setStatus(CommissionOfferStatus status) {
+        this.status = status;
+    }
+
     public LocalDateTime getCreatedAt() {
         return createdAt;
+    }
+
+    public void setCreatedAt(LocalDateTime createdAt) {
+        this.createdAt = createdAt;
     }
 }

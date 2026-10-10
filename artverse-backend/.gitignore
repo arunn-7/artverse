@@ -46,3 +46,20 @@ application-local.yml
 
 # Application secrets
 src/main/resources/application.properties
+
+
+# Firebase service-account credentials
+*service-account*.json
+*serviceAccountKey*.json
+firebase-adminsdk*.json
+
+# Local secret configuration
+application-local.properties
+application-local.yml
+
+
+# Local database backup
+../artverse_database/
+
+# Local project archive
+../artverse-backend.zip
